@@ -86,20 +86,38 @@ def browse():
         cursor.execute(count_query, params)
         total_count = cursor.fetchone()['total']
         
-        # Get paginated results
+        # Get paginated results with deduplication
         offset = (page - 1) * per_page
         
         query = f"""
-            SELECT 
-                c.*,
+            SELECT DISTINCT
+                c.id,
+                c.title,
+                c.description,
+                c.type,
+                c.difficulty_level,
+                c.file_url,
+                c.external_link,
+                c.tags,
+                c.uploaded_by,
+                c.category_id,
+                c.is_published,
+                c.download_count,
+                c.view_count,
+                c.average_rating,
+                c.rating_count,
+                c.created_at,
+                c.updated_at,
                 cat.name as category_name,
                 u.full_name as uploader_name,
-                CASE WHEN ua.content_id IS NOT NULL THEN 1 ELSE 0 END as user_viewed
+                (SELECT COUNT(*) FROM user_activities ua 
+                 WHERE ua.content_id = c.id AND ua.user_id = ? 
+                 LIMIT 1) as user_viewed
             FROM content c
             LEFT JOIN categories cat ON c.category_id = cat.id
             LEFT JOIN users u ON c.uploaded_by = u.id
-            LEFT JOIN user_activities ua ON c.id = ua.content_id AND ua.user_id = ?
             WHERE {where_clause}
+            GROUP BY c.id
             ORDER BY c.created_at DESC
             LIMIT ? OFFSET ?
         """
