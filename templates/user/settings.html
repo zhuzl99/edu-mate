@@ -103,24 +103,45 @@
                                         <div class="col-md-4 mb-2">
                                             <div class="form-check">
                                                 <input class="form-check-input" type="checkbox" name="preferred_content_types" 
-                                                       value="article" id="type_article"
-                                                       {% if user.preferred_content_types and 'article' in user.preferred_content_types %}checked{% endif %}>
-                                                <label class="form-check-label" for="type_article">
-                                                    <i class="fas fa-newspaper"></i> Article
+                                                       value="document" id="type_document"
+                                                       {% if user.preferred_content_types and 'document' in user.preferred_content_types %}checked{% endif %}>
+                                                <label class="form-check-label" for="type_document">
+                                                    <i class="fas fa-file-pdf"></i> Document
                                                 </label>
                                             </div>
                                         </div>
                                         <div class="col-md-4 mb-2">
                                             <div class="form-check">
                                                 <input class="form-check-input" type="checkbox" name="preferred_content_types" 
-                                                       value="quiz" id="type_quiz"
-                                                       {% if user.preferred_content_types and 'quiz' in user.preferred_content_types %}checked{% endif %}>
-                                                <label class="form-check-label" for="type_quiz">
-                                                    <i class="fas fa-question-circle"></i> Quiz
+                                                       value="presentation" id="type_presentation"
+                                                       {% if user.preferred_content_types and 'presentation' in user.preferred_content_types %}checked{% endif %}>
+                                                <label class="form-check-label" for="type_presentation">
+                                                    <i class="fas fa-presentation"></i> Presentation
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4 mb-2">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" name="preferred_content_types" 
+                                                       value="link" id="type_link"
+                                                       {% if user.preferred_content_types and 'link' in user.preferred_content_types %}checked{% endif %}>
+                                                <label class="form-check-label" for="type_link">
+                                                    <i class="fas fa-link"></i> External Link
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4 mb-2">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" name="preferred_content_types" 
+                                                       value="pdf" id="type_pdf"
+                                                       {% if user.preferred_content_types and 'pdf' in user.preferred_content_types %}checked{% endif %}>
+                                                <label class="form-check-label" for="type_pdf">
+                                                    <i class="fas fa-file-alt"></i> PDF
                                                 </label>
                                             </div>
                                         </div>
                                     </div>
+                                    <small class="text-muted">Select the types of content you prefer to learn from. This will help us recommend more relevant content for you.</small>
                                 </div>
                                 
                                 <div class="mb-4">

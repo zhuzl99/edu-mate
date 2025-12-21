@@ -65,7 +65,7 @@ def profile():
         
         # Get recent activities
         cursor.execute("""
-            SELECT c.title, c.type, ua.activity_type, ua.created_at
+            SELECT c.id as content_id, c.title, c.type, ua.activity_type, ua.created_at
             FROM user_activities ua
             JOIN content c ON ua.content_id = c.id
             WHERE ua.user_id = ?
@@ -217,25 +217,66 @@ def settings():
             preferred_categories = request.form.getlist('preferred_categories')
             learning_goals = request.form.get('learning_goals')
             
-            # Update preferences
-            connection.execute("""
-                UPDATE user_preferences 
-                SET preferred_difficulty = ?,
-                    preferred_content_types = ?,
-                    preferred_categories = ?,
-                    learning_goals = ?,
-                    updated_at = ?
-                WHERE user_id = ?
-            """, (
-                preferred_difficulty,
-                str(preferred_content_types) if preferred_content_types else None,
-                str(preferred_categories) if preferred_categories else None,
-                learning_goals,
-                datetime.now(),
-                session['user_id']
-            ))
+            # Convert lists to string format for storage
+            content_types_str = str(preferred_content_types) if preferred_content_types else None
+            categories_str = str(preferred_categories) if preferred_categories else None
+            
+            # Log what we're saving
+            print(f"DEBUG: Saving preferences for user {session['user_id']}")
+            print(f"DEBUG: Content types: {preferred_content_types} -> {content_types_str}")
+            print(f"DEBUG: Categories: {preferred_categories} -> {categories_str}")
+            print(f"DEBUG: Difficulty: {preferred_difficulty}")
+            
+            # Check if user preferences record exists
+            existing_prefs = connection.execute("""
+                SELECT id FROM user_preferences WHERE user_id = ?
+            """, (session['user_id'],)).fetchone()
+            
+            if existing_prefs:
+                # Update existing preferences
+                print(f"DEBUG: Updating existing preferences (id: {existing_prefs['id']})")
+                connection.execute("""
+                    UPDATE user_preferences 
+                    SET preferred_difficulty = ?,
+                        preferred_content_types = ?,
+                        preferred_categories = ?,
+                        learning_goals = ?,
+                        updated_at = ?
+                    WHERE user_id = ?
+                """, (
+                    preferred_difficulty,
+                    content_types_str,
+                    categories_str,
+                    learning_goals,
+                    datetime.now(),
+                    session['user_id']
+                ))
+            else:
+                # Insert new preferences record
+                print(f"DEBUG: Creating new preferences record")
+                connection.execute("""
+                    INSERT INTO user_preferences 
+                    (user_id, preferred_difficulty, preferred_content_types, 
+                     preferred_categories, learning_goals, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    session['user_id'],
+                    preferred_difficulty,
+                    content_types_str,
+                    categories_str,
+                    learning_goals,
+                    datetime.now(),
+                    datetime.now()
+                ))
             
             connection.commit()
+            
+            # Verify the save
+            saved_prefs = connection.execute("""
+                SELECT * FROM user_preferences WHERE user_id = ?
+            """, (session['user_id'],)).fetchone()
+            print(f"DEBUG: Saved preferences: {dict(saved_prefs) if saved_prefs else 'None'}")
+            
             flash('Preferences updated successfully!', 'success')
             return redirect(url_for('user.settings'))
         
