@@ -141,14 +141,45 @@
 {% block extra_js %}
 <script>
 // Toggle between file upload and external link
-document.getElementById('upload_file').addEventListener('change', function() {
-    document.getElementById('file_upload_group').style.display = 'block';
-    document.getElementById('external_link_group').style.display = 'none';
+function toggleContentType() {
+    const sourceType = document.querySelector('input[name="source_type"]:checked').value;
+    const fileGroup = document.getElementById('file_upload_group');
+    const linkGroup = document.getElementById('external_link_group');
+    
+    if (sourceType === 'file') {
+        fileGroup.style.display = 'block';
+        linkGroup.style.display = 'none';
+        document.getElementById('external_link').removeAttribute('required');
+        document.getElementById('file').setAttribute('required', 'required');
+    } else {
+        fileGroup.style.display = 'none';
+        linkGroup.style.display = 'block';
+        document.getElementById('file').removeAttribute('required');
+        document.getElementById('external_link').setAttribute('required', 'required');
+    }
+}
+
+// Add event listeners
+document.querySelectorAll('input[name="source_type"]').forEach(radio => {
+    radio.addEventListener('change', toggleContentType);
 });
 
-document.getElementById('external_link').addEventListener('change', function() {
-    document.getElementById('file_upload_group').style.display = 'none';
-    document.getElementById('external_link_group').style.display = 'block';
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', toggleContentType);
+
+// Form validation
+document.querySelector('form').addEventListener('submit', function(e) {
+    const sourceType = document.querySelector('input[name="source_type"]:checked').value;
+    const contentFile = document.getElementById('file').files[0];
+    const externalLink = document.getElementById('external_link').value;
+    
+    if (sourceType === 'file' && !contentFile) {
+        e.preventDefault();
+        alert('Please select a file to upload.');
+    } else if (sourceType === 'link' && !externalLink) {
+        e.preventDefault();
+        alert('Please provide an external link.');
+    }
 });
 </script>
 {% endblock %}

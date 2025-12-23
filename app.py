@@ -5,6 +5,7 @@ Main Flask Application
 from flask import Flask, render_template, request, jsonify, redirect, url_for, session, flash
 import sqlite3
 import logging
+import os
 from datetime import datetime
 from config import config
 
@@ -16,10 +17,36 @@ app.config.from_object(config[config_name])
 def get_db_connection():
     """Get database connection"""
     try:
-        conn = sqlite3.connect('edumate_local.db')
+        db_path = app.config.get('DATABASE_PATH', 'edumate_local.db')
+        
+        # Check if database file exists and is writable
+        if not os.path.exists(db_path):
+            app.logger.error(f"Database file not found: {db_path}")
+            flash('Database file not found. Please contact administrator.', 'error')
+            return None
+            
+        if not os.access(db_path, os.R_OK | os.W_OK):
+            app.logger.error(f"Database file permission denied: {db_path}")
+            flash('Database permission denied. Please check file permissions.', 'error')
+            return None
+        
+        # Connect with timeout and write-ahead logging
+        conn = sqlite3.connect(db_path, timeout=10.0)
         conn.row_factory = sqlite3.Row  # Return rows as dictionaries
+        
+        # Enable WAL mode for better concurrency
+        conn.execute('PRAGMA journal_mode=WAL')
+        conn.execute('PRAGMA synchronous=NORMAL')
+        conn.execute('PRAGMA busy_timeout=10000')
+        
         return conn
+        
+    except sqlite3.Error as err:
+        app.logger.error(f"SQLite error: {err}")
+        flash(f'Database connection error: {err}', 'error')
+        return None
     except Exception as err:
+        app.logger.error(f"Unexpected database error: {err}")
         flash(f'Database error: {err}', 'error')
         return None
 
@@ -59,12 +86,43 @@ def format_datetime(value, format='%Y-%m-%d %H:%M'):
     
     return str(value)
 
+@app.template_filter('split_tags')
+def split_tags(value):
+    """Split tags string into list"""
+    if not value:
+        return []
+    
+    # If it's already a list, return as is
+    if isinstance(value, list):
+        return value
+    
+    # Handle string representation of list
+    if isinstance(value, str):
+        if '[' in value and ']' in value:
+            # Remove brackets and quotes, then split by comma
+            clean_value = value.replace('[', '').replace(']', '').replace("'", '').replace('"', '')
+            tags = [tag.strip() for tag in clean_value.split(',') if tag.strip()]
+        else:
+            # Handle simple comma-separated string
+            tags = [tag.strip() for tag in value.split(',') if tag.strip()]
+        return tags
+    
+    return []
+
 # Import route blueprints
 from routes.auth import auth_bp
 from routes.user import user_bp
 from routes.content import content_bp
 from routes.recommendation import recommendation_bp
 from routes.admin import admin_bp
+
+# Add custom static route for uploads
+@app.route('/uploads/<filename>')
+def uploaded_file(filename):
+    """Serve uploaded files"""
+    from flask import send_from_directory
+    upload_folder = os.path.join(os.path.dirname(__file__), 'uploads')
+    return send_from_directory(upload_folder, filename)
 
 # Register blueprints
 app.register_blueprint(auth_bp, url_prefix='/auth')

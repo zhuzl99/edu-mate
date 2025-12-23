@@ -5,9 +5,29 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 import sqlite3
 from datetime import datetime
 import os
+from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
 
 load_dotenv()
+
+def allowed_file(filename, content_type):
+    """Check if file is allowed for content type"""
+    ALLOWED_EXTENSIONS = {
+        'video': {'mp4', 'avi', 'mov', 'wmv', 'flv'},
+        'document': {'pdf', 'doc', 'docx', 'txt'},
+        'presentation': {'ppt', 'pptx', 'pdf'},
+        'pdf': {'pdf'}
+    }
+    
+    if '.' not in filename:
+        return False
+    
+    ext = filename.rsplit('.', 1)[1].lower()
+    
+    if content_type in ALLOWED_EXTENSIONS:
+        return ext in ALLOWED_EXTENSIONS[content_type]
+    
+    return False
 
 content_bp = Blueprint('content', __name__)
 
@@ -15,10 +35,35 @@ def get_db_connection():
     """Get database connection"""
     try:
         db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'edumate_local.db')
-        connection = sqlite3.connect(db_path)
+        
+        # Check if database file exists and is writable
+        if not os.path.exists(db_path):
+            current_app.logger.error(f"Database file not found: {db_path}")
+            flash('Database file not found. Please contact administrator.', 'error')
+            return None
+            
+        if not os.access(db_path, os.R_OK | os.W_OK):
+            current_app.logger.error(f"Database file permission denied: {db_path}")
+            flash('Database permission denied. Please check file permissions.', 'error')
+            return None
+        
+        # Connect with timeout and write-ahead logging
+        connection = sqlite3.connect(db_path, timeout=10.0)
         connection.row_factory = sqlite3.Row  # This makes results behave like dictionaries
+        
+        # Enable WAL mode for better concurrency
+        connection.execute('PRAGMA journal_mode=WAL')
+        connection.execute('PRAGMA synchronous=NORMAL')
+        connection.execute('PRAGMA busy_timeout=10000')
+        
         return connection
+        
+    except sqlite3.Error as err:
+        current_app.logger.error(f"SQLite error: {err}")
+        flash(f'Database connection error: {err}', 'error')
+        return None
     except Exception as err:
+        current_app.logger.error(f"Unexpected database error: {err}")
         flash(f'Database error: {err}', 'error')
         return None
 
@@ -182,26 +227,56 @@ def upload():
             category_id = request.form.get('category_id')
             tags = request.form.getlist('tags')
             external_link = request.form.get('external_link')
+            source_type = request.form.get('source_type')
             
             # Validation
             if not all([title, content_type, difficulty]):
                 flash('Please fill in all required fields', 'error')
-                return render_template('content/upload.html')
+                return render_template('content/upload.html', categories=categories)
             
-            if content_type in ['video', 'document', 'presentation'] and not external_link:
-                flash('Please provide a file URL or external link', 'error')
-                return render_template('content/upload.html')
+            file_url = external_link
+            
+            # Handle file upload if source_type is 'file'
+            if source_type == 'file':
+                if 'file' not in request.files:
+                    flash('No file selected', 'error')
+                    return render_template('content/upload.html', categories=categories)
+                
+                file = request.files['file']
+                if file.filename == '':
+                    flash('No file selected', 'error')
+                    return render_template('content/upload.html', categories=categories)
+                
+                if file and allowed_file(file.filename, content_type):
+                    # Create uploads directory if it doesn't exist
+                    upload_folder = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'uploads')
+                    if not os.path.exists(upload_folder):
+                        os.makedirs(upload_folder)
+                    
+                    # Generate unique filename
+                    filename = secure_filename(file.filename)
+                    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_')
+                    unique_filename = timestamp + filename
+                    
+                    file_path = os.path.join(upload_folder, unique_filename)
+                    file.save(file_path)
+                    
+                    # Create URL for the file
+                    file_url = url_for('static', filename=f'uploads/{unique_filename}')
+                else:
+                    flash('File type not allowed for this content type', 'error')
+                    return render_template('content/upload.html', categories=categories)
             
             # Insert content
             tags_json = str(tags) if tags else None
             
             cursor.execute("""
                 INSERT INTO content 
-                (title, description, type, difficulty_level, external_link, 
+                (title, description, type, difficulty_level, external_link, file_url,
                  uploaded_by, category_id, tags, is_published, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
-                title, description, content_type, difficulty, external_link,
+                title, description, content_type, difficulty, external_link, file_url,
                 session['user_id'], category_id or None, tags_json,
                 1, datetime.now(), datetime.now()  # SQLite uses 1 for boolean
             ))
@@ -291,7 +366,7 @@ def view(content_id):
         # Get all feedback for this content with pagination support
         cursor.execute("""
             SELECT 
-                cf.rating, cf.comment, cf.created_at, cf.updated_at,
+                cf.id, cf.rating, cf.comment, cf.created_at, cf.updated_at,
                 COALESCE(u.full_name, u.username) as user_name,
                 u.id as user_id
             FROM content_feedback cf
@@ -496,6 +571,83 @@ def record_activity(content_id):
     
     except Exception as err:
         current_app.logger.error(f"Error recording activity: {err}")
+        return jsonify({'error': str(err)}), 500
+
+@content_bp.route('/<int:content_id>/feedback/<int:feedback_id>/delete', methods=['POST'])
+def delete_feedback(content_id, feedback_id):
+    """Delete a comment/feedback"""
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({'error': 'Database error'}), 500
+    
+    try:
+        cursor = connection.cursor()
+        
+        # Get feedback details to check permissions
+        cursor.execute("""
+            SELECT cf.user_id as feedback_user_id, cf.content_id,
+                   c.uploaded_by as content_author_id
+            FROM content_feedback cf
+            JOIN content c ON cf.content_id = c.id
+            WHERE cf.id = ? AND cf.content_id = ?
+        """, (feedback_id, content_id))
+        
+        feedback = cursor.fetchone()
+        
+        if not feedback:
+            return jsonify({'error': 'Feedback not found'}), 404
+        
+        # Check permissions: admin can delete any feedback, users can delete their own
+        current_user_id = session['user_id']
+        is_admin = session.get('role') == 'admin'
+        is_feedback_owner = feedback['feedback_user_id'] == current_user_id
+        
+        if not (is_admin or is_feedback_owner):
+            return jsonify({'error': 'Permission denied'}), 403
+        
+        # Delete the feedback
+        cursor.execute("""
+            DELETE FROM content_feedback 
+            WHERE id = ? AND content_id = ?
+        """, (feedback_id, content_id))
+        
+        # Update content's average rating
+        cursor.execute("""
+            UPDATE content 
+            SET average_rating = (
+                SELECT COALESCE(AVG(CAST(rating AS FLOAT)), 0) 
+                FROM content_feedback 
+                WHERE content_id = ?
+            ),
+            rating_count = (
+                SELECT COUNT(*) 
+                FROM content_feedback 
+                WHERE content_id = ?
+            )
+            WHERE id = ?
+        """, (content_id, content_id, content_id))
+        
+        # Log the deletion
+        action_type = 'ADMIN_DELETED_FEEDBACK' if is_admin else 'USER_DELETED_FEEDBACK'
+        cursor.execute("""
+            INSERT INTO system_logs (user_id, action, resource_type, resource_id, created_at)
+            VALUES (?, ?, ?, ?, ?)
+        """, (current_user_id, action_type, 'feedback', feedback_id, datetime.now()))
+        
+        connection.commit()
+        cursor.close()
+        connection.close()
+        
+        return jsonify({
+            'success': True, 
+            'message': 'Feedback deleted successfully'
+        })
+    
+    except Exception as err:
+        current_app.logger.error(f"Error deleting feedback: {err}")
         return jsonify({'error': str(err)}), 500
 
 @content_bp.route('/<int:content_id>/edit', methods=['GET', 'POST'])

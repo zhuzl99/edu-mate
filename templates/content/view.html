@@ -134,12 +134,35 @@
     color: #ddd;
     cursor: pointer;
     transition: all 0.2s ease;
-    margin: 0 !important;
+    margin: 0 2px !important;
+    padding: 4px;
+    border-radius: 4px;
 }
 
 .compact-rating-star:hover {
     color: #ffc107 !important;
-    transform: scale(1.1);
+    transform: scale(1.15);
+    background-color: rgba(255, 193, 7, 0.1);
+}
+
+.compact-rating-star.active {
+    color: #ffc107 !important;
+}
+
+.compact-rating-star:active {
+    transform: scale(0.95);
+    background-color: rgba(255, 193, 7, 0.2);
+}
+
+.rating-hint {
+    font-size: 0.85rem;
+    font-weight: 500;
+    transition: color 0.2s ease;
+    text-align: center;
+    padding: 4px 8px;
+    border-radius: 12px;
+    background-color: rgba(0, 0, 0, 0.05);
+    display: inline-block;
 }
 
 .rating-form-group {
@@ -259,6 +282,71 @@
     transform: translateY(-2px);
     box-shadow: 0 6px 20px rgba(0,0,0,0.15);
 }
+
+.pdf-viewer {
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.video-container {
+    position: relative;
+    padding-bottom: 56.25%; /* 16:9 Aspect Ratio */
+    height: 0;
+    overflow: hidden;
+}
+
+.video-container video {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: #000;
+}
+
+/* Delete feedback button styles */
+.feedback-item {
+    position: relative;
+    transition: all 0.3s ease;
+}
+
+.feedback-item:hover {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.feedback-delete-btn {
+    opacity: 0.7;
+    transition: all 0.2s ease;
+    padding: 4px 8px;
+    font-size: 0.8rem;
+}
+
+.feedback-delete-btn:hover {
+    opacity: 1;
+    transform: scale(1.05);
+    box-shadow: 0 2px 6px rgba(220, 53, 69, 0.3);
+}
+
+.feedback-delete-btn:active {
+    transform: scale(0.95);
+}
+
+/* Fade out animation for deleted feedback */
+@keyframes fadeOutSlide {
+    0% {
+        opacity: 1;
+        transform: translateX(0);
+    }
+    100% {
+        opacity: 0;
+        transform: translateX(-20px);
+    }
+}
+
+.feedback-deleting {
+    animation: fadeOutSlide 0.3s ease-out forwards;
+}
 </style>
 
 <div class="container">
@@ -307,18 +395,29 @@
             <!-- Content Body -->
             <div class="content-body">
                 {% if content.type == 'video' %}
-                    <div class="embed-responsive embed-responsive-16by9 mb-4 content-preview">
+                    <div class="content-preview mb-4">
                         {% if content.file_url %}
-                            <video controls class="w-100">
-                                <source src="{{ content.file_url }}" type="video/mp4">
-                                Your browser does not support the video tag.
-                            </video>
+                            <div class="video-container">
+                                <video controls preload="metadata">
+                                    <source src="{{ content.file_url }}" type="video/mp4">
+                                    <source src="{{ content.file_url }}" type="video/webm">
+                                    <source src="{{ content.file_url }}" type="video/ogg">
+                                    Your browser does not support the video tag.
+                                </video>
+                            </div>
                         {% else %}
                             <img src="https://picsum.photos/seed/video{{ content.id }}/800/450.jpg" class="img-fluid rounded" alt="Video thumbnail">
                         {% endif %}
                     </div>
-                {% elif content.type == 'document' %}
+                {% elif content.type == 'document' or content.type == 'pdf' %}
                     {% if content.file_url %}
+                        <div class="content-preview">
+                            <iframe src="{{ content.file_url }}" class="pdf-viewer" width="100%" height="600px">
+                                <p>Your browser does not support PDFs. 
+                                <a href="{{ content.file_url }}" target="_blank">Download the PDF</a>.</p>
+                            </iframe>
+                        </div>
+                    {% else %}
                         <div class="content-preview text-center">
                             <i class="fas fa-file-pdf fa-5x text-danger mb-3"></i>
                             <h4>PDF Document</h4>
@@ -331,9 +430,23 @@
                     </div>
                 {% elif content.type == 'presentation' %}
                     {% if content.file_url %}
-                        <div class="content-preview text-center">
-                            <i class="fas fa-presentation fa-5x text-warning mb-3"></i>
-                            <h4>Presentation</h4>
+                        <div class="content-preview">
+                            <div class="text-center mb-3">
+                                <i class="fas fa-presentation fa-5x text-warning mb-3"></i>
+                                <h4>Presentation</h4>
+                            </div>
+                            {% if content.file_url.endswith('.pdf') %}
+                                <iframe src="{{ content.file_url }}" class="pdf-viewer" width="100%" height="600px">
+                                    <p>Your browser does not support PDFs. 
+                                    <a href="{{ content.file_url }}" target="_blank">Download the presentation</a>.</p>
+                                </iframe>
+                            {% else %}
+                                <div class="text-center">
+                                    <a href="{{ content.file_url }}" class="btn btn-primary btn-lg btn-custom" target="_blank">
+                                        <i class="fas fa-download me-2"></i>Download Presentation
+                                    </a>
+                                </div>
+                            {% endif %}
                         </div>
                     {% endif %}
                 {% else %}
@@ -386,7 +499,7 @@
                 <div class="rating-widget">
                     <div class="d-flex justify-content-between align-items-start mb-3">
                         <div>
-                            <h6 class="mb-1"><i class="fas fa-star me-2 text-warning"></i>{% if user_feedback %}Your Rating{% else %}Quick Rate{% endif %}</h6>
+                            <h6 class="mb-1"><i class="fas fa-star me-2 text-warning"></i>{% if user_feedback %}Your Rating (Update){% else %}Rate this Content{% endif %}</h6>
                             {% if user_feedback %}
                                 <div class="user-rating-display">
                                     {% for i in range(5) %}
@@ -397,9 +510,10 @@
                             {% endif %}
                         </div>
                         <div class="rating-stars-large">
+                            <div class="rating-hint mb-2" id="ratingHint">Click to rate this content</div>
                             {% for i in range(5, 0, -1) %}
                                 <input type="radio" id="compactStar{{ i }}" name="compactRating" value="{{ i }}" class="d-none" {% if user_feedback and user_feedback.rating == i %}checked{% endif %}>
-                                <label for="compactStar{{ i }}" class="rating-label">
+                                <label for="compactStar{{ i }}" class="rating-label" title="{{ i }} star{{ 's' if i != 1 else '' }}">
                                     <i class="fas fa-star rating-star compact-rating-star" data-rating="{{ i }}"></i>
                                 </label>
                             {% endfor %}
@@ -422,7 +536,7 @@
                     <button class="nav-link active" id="details-tab" data-bs-toggle="tab" data-bs-target="#details" type="button" role="tab" aria-controls="details" aria-selected="true">Details</button>
                 </li>
                 <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="reviews-tab" data-bs-toggle="tab" data-bs-target="#reviews" type="button" role="tab" aria-controls="reviews" aria-selected="false">Reviews ({{ feedback_count }})</button>
+                    <button class="nav-link" id="reviews-tab" data-bs-toggle="tab" data-bs-target="#reviews" type="button" role="tab" aria-controls="reviews" aria-selected="false">All Reviews ({{ feedback_count }})</button>
                 </li>
                 {% if session.role == 'admin' or (session.role == 'instructor' and content.uploaded_by == session.user_id) %}
                 <li class="nav-item" role="presentation">
@@ -437,14 +551,11 @@
                     <div class="row mt-4">
                         <div class="col-md-6">
                             <h6><i class="fas fa-tag me-2"></i>Tags</h6>
-                            {% if content.tags %}
-                                {% if content.tags.startswith('[') %}
-                                    {% for tag in content.tags|replace('[', '')|replace(']', '')|replace("'", '')|split(',') %}
-                                        <span class="badge badge-secondary mr-2">{{ tag.strip() }}</span>
-                                    {% endfor %}
-                                {% else %}
-                                    <span class="badge badge-secondary mr-2">{{ content.tags }}</span>
-                                {% endif %}
+                            {% set tags_list = content.tags|split_tags %}
+                            {% if tags_list %}
+                                {% for tag in tags_list %}
+                                    <span class="badge badge-secondary mr-2">{{ tag }}</span>
+                                {% endfor %}
                             {% else %}
                                 <p class="text-muted">No tags specified</p>
                             {% endif %}
@@ -550,51 +661,14 @@
                         </div>
                         {% endif %}
                         
-                        <!-- User's Current Rating -->
-                        {% if user_feedback %}
-                            <div class="alert alert-info mb-4">
-                                <h6><i class="fas fa-info-circle me-2"></i>Your Current Rating</h6>
-                                <div class="mb-2">
-                                    {% for i in range(5) %}
-                                        <i class="fas fa-star {% if i < user_feedback.rating %}text-warning{% else %}text-muted{% endif %}"></i>
-                                    {% endfor %}
-                                    <span class="ms-2">{{ user_feedback.rating }}/5</span>
-                                </div>
-                                {% if user_feedback.comment %}
-                                    <p class="mb-2"><em>"{{ user_feedback.comment }}"</em></p>
-                                {% endif %}
-                                <small class="text-muted">Rated on {{ user_feedback.created_at|format_datetime }}</small>
-                            </div>
-                        {% endif %}
-                        
-                        <!-- Rating Form -->
-                        <h5><i class="fas fa-star me-2"></i>{% if user_feedback %}Update Your Rating{% else %}Rate this Content{% endif %}</h5>
-                        <div class="mb-3">
-                            {% for i in range(5, 0, -1) %}
-                                <input type="radio" id="star{{ i }}" name="rating" value="{{ i }}" class="d-none" {% if user_feedback and user_feedback.rating == i %}checked{% endif %}>
-                                <label for="star{{ i }}" class="rating-label">
-                                    <i class="fas fa-star rating-star" data-rating="{{ i }}"></i>
-                                </label>
-                            {% endfor %}
-                        </div>
-                        <div class="mb-3">
-                            <textarea class="form-control" id="ratingComment" rows="3" placeholder="Share your thoughts about this content (optional)...">{% if user_feedback and user_feedback.comment %}{{ user_feedback.comment }}{% endif %}</textarea>
-                        </div>
-                        <div class="d-flex gap-2">
-                            <button type="button" class="btn btn-primary btn-custom" onclick="submitRating()">
-                                <i class="fas fa-paper-plane me-2"></i>{% if user_feedback %}Update Rating{% else %}Submit Rating{% endif %}
-                            </button>
-                        </div>
-                    </div>
-
                     <!-- All User Reviews -->
                     <hr class="my-4">
                     <h5 class="mb-4"><i class="fas fa-comments me-2"></i>All Reviews ({{ feedback_count }})</h5>
                     {% if feedback_list and feedback_list|length > 0 %}
                         {% for feedback in feedback_list %}
-                            <div class="feedback-item p-3 mb-3 border rounded {% if feedback.user_id == session.user_id %}bg-light{% endif %}">
-                                <div class="d-flex justify-content-between align-items-start mb-2">
-                                    <div>
+                            <div class="feedback-item p-3 mb-3 border rounded {% if feedback.user_id == session.user_id %}bg-light{% endif %}" id="feedback-{{ feedback.id }}">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div class="flex-grow-1">
                                         <h6 class="mb-1">
                                             {{ feedback.user_name or 'Anonymous' }}
                                             {% if feedback.user_id == session.user_id %}
@@ -607,23 +681,32 @@
                                             {% endfor %}
                                             <span class="ms-2 text-muted">{{ feedback.rating }}/5</span>
                                         </div>
-                                    </div>
-                                    <div class="text-end">
-                                        <small class="text-muted d-block">
-                                            {{ feedback.created_at|format_datetime }}
-                                        </small>
-                                        {% if feedback.updated_at and feedback.updated_at != feedback.created_at %}
-                                            <small class="text-muted d-block fst-italic">
-                                                (edited)
-                                            </small>
+                                        {% if feedback.comment %}
+                                            <p class="mb-2 text-dark">{{ feedback.comment }}</p>
+                                        {% else %}
+                                            <p class="mb-2 text-muted fst-italic">No written comment</p>
                                         {% endif %}
                                     </div>
+                                    <div class="d-flex flex-column align-items-end">
+                                        {% if feedback.user_id == session.user_id or session.role == 'admin' %}
+                                            <button class="btn btn-sm btn-outline-danger feedback-delete-btn mb-2" 
+                                                    onclick="deleteFeedback({{ feedback.id }})"
+                                                    title="{% if feedback.user_id == session.user_id %}Delete your review{% else %}Delete this review (Admin){% endif %}">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        {% endif %}
+                                        <div class="text-end">
+                                            <small class="text-muted d-block">
+                                                {{ feedback.created_at|format_datetime }}
+                                            </small>
+                                            {% if feedback.updated_at and feedback.updated_at != feedback.created_at %}
+                                                <small class="text-muted d-block fst-italic">
+                                                    (edited)
+                                                </small>
+                                            {% endif %}
+                                        </div>
+                                    </div>
                                 </div>
-                                {% if feedback.comment %}
-                                    <p class="mb-0 text-dark">{{ feedback.comment }}</p>
-                                {% else %}
-                                    <p class="mb-0 text-muted fst-italic">No written comment</p>
-                                {% endif %}
                             </div>
                         {% endfor %}
                     {% else %}
@@ -653,9 +736,12 @@
                 </div>
                 {% endif %}
             </div>
-        </div>
+        </div> <!-- End of col-lg-8 -->
 
-        <div class="col-lg-4">
+
+    </div> <!-- End of row -->
+
+            <div class="col-lg-4">
             <!-- Stats Card -->
             <div class="stats-card">
                 <h5 class="mb-4"><i class="fas fa-chart-bar me-2"></i>Content Stats</h5>
@@ -747,9 +833,8 @@
                 {% endif %}
             </div>
             {% endif %}
-        </div>
-    </div>
-</div>
+        </div> <!-- End of col-lg-4 -->
+</div> <!-- End of container -->
 
 <!-- Rating Modal -->
 <div class="modal fade" id="rateModal" tabindex="-1" aria-labelledby="rateModalLabel" aria-hidden="true">
@@ -786,9 +871,9 @@
                     <i class="fas fa-paper-plane me-2"></i>Submit Rating
                 </button>
             </div>
-        </div>
-    </div>
-</div>
+        </div> <!-- End of col-lg-4 -->
+    </div> <!-- End of row -->
+</div> <!-- End of container -->
 {% endblock %}
 
 {% block extra_js %}
@@ -1009,59 +1094,7 @@ function submitMainRating() {
     });
 }
 
-function submitRating() {
-    var rating = document.querySelector('input[name="rating"]:checked');
-    var comment = document.getElementById('ratingComment') ? document.getElementById('ratingComment').value : '';
-    
-    if (!rating) {
-        showNotification('Please select a rating', 'warning');
-        return;
-    }
-    
-    // Show loading state
-    var submitBtn = event.target;
-    var originalText = submitBtn.innerHTML;
-    submitBtn.disabled = true;
-    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Submitting...';
-    
-    // Submit rating via AJAX
-    fetch('/content/{{ content.id }}/rate', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-            rating: parseInt(rating.value),
-            comment: comment
-        })
-    })
-    .then(function(response) {
-        return response.json();
-    })
-    .then(function(data) {
-        if (data.success) {
-            var isUpdate = {% if user_feedback %}true{% else %}false{% endif %};
-            var message = isUpdate ? 'Rating updated successfully!' : 'Rating submitted successfully!';
-            showNotification(message, 'success');
-            
-            // Update the UI without full page reload
-            setTimeout(function() {
-                location.reload();
-            }, 1000);
-        } else {
-            showNotification(data.error || 'Failed to submit rating', 'error');
-        }
-    })
-    .catch(function(error) {
-        console.error('Error:', error);
-        showNotification('Network error. Please try again.', 'warning');
-    })
-    .finally(function() {
-        // Restore button state
-        submitBtn.disabled = false;
-        submitBtn.innerHTML = originalText;
-    });
-}
+
 
 // Initialize rating stars
 document.addEventListener('DOMContentLoaded', function() {
@@ -1072,6 +1105,7 @@ document.addEventListener('DOMContentLoaded', function() {
     var compactCheckedRating = document.querySelector('input[name="compactRating"]:checked');
     var compactInitialRating = compactCheckedRating ? compactCheckedRating.value : 0;
     updateCompactStars(compactInitialRating);
+    updateRatingHint(compactInitialRating);
     
     compactStars.forEach(function(star) {
         star.addEventListener('click', function() {
@@ -1083,47 +1117,21 @@ document.addEventListener('DOMContentLoaded', function() {
         star.addEventListener('mouseenter', function() {
             var rating = this.dataset.rating;
             updateCompactStars(rating);
+            updateRatingHint(rating);
         });
     });
     
-    var compactRatingContainer = document.querySelector('.rating-stars-large');
+    var compactRatingContainer = document.querySelector('.rating-widget');
     if (compactRatingContainer) {
         compactRatingContainer.addEventListener('mouseleave', function() {
             var checked = document.querySelector('input[name="compactRating"]:checked');
             var rating = checked ? checked.value : 0;
             updateCompactStars(rating);
+            updateRatingHint(rating);
         });
     }
     
-    // Initialize tab rating stars
-    var stars = document.querySelectorAll('.rating-star:not(.compact-rating-star)');
-    
-    // Initialize stars with current rating
-    var checkedRating = document.querySelector('input[name="rating"]:checked');
-    var initialRating = checkedRating ? checkedRating.value : 0;
-    updateStars(initialRating);
-    
-    stars.forEach(function(star) {
-        star.addEventListener('click', function() {
-            var rating = this.dataset.rating;
-            document.getElementById('star' + rating).checked = true;
-            updateStars(rating);
-        });
-        
-        star.addEventListener('mouseenter', function() {
-            var rating = this.dataset.rating;
-            updateStars(rating);
-        });
-    });
-    
-    var ratingContainer = document.querySelector('.rating-label').parentElement;
-    if (ratingContainer) {
-        ratingContainer.addEventListener('mouseleave', function() {
-            var checked = document.querySelector('input[name="rating"]:checked');
-            var rating = checked ? checked.value : 0;
-            updateStars(rating);
-        });
-    }
+    // No separate review rating initialization needed - unified in Quick Rate
     
     // Modal rating stars
     var modalStars = document.querySelectorAll('.modal-rating-star');
@@ -1157,15 +1165,40 @@ function updateStars(rating) {
     });
 }
 
+
+
 function updateCompactStars(rating) {
     var stars = document.querySelectorAll('.compact-rating-star');
     stars.forEach(function(star, index) {
         if (index >= 5 - rating) {
             star.style.color = '#ffc107';
+            star.classList.add('active');
         } else {
             star.style.color = '#ddd';
+            star.classList.remove('active');
         }
     });
+}
+
+function updateRatingHint(rating) {
+    var hintElement = document.getElementById('ratingHint');
+    if (!hintElement) return;
+    
+    var hints = {
+        1: 'Poor - Not recommended',
+        2: 'Fair - Below average',
+        3: 'Good - Average content',
+        4: 'Very Good - High quality',
+        5: 'Excellent - Outstanding content'
+    };
+    
+    if (rating > 0) {
+        hintElement.textContent = hints[rating] + ' (' + rating + ' star' + (rating != 1 ? 's' : '') + ')';
+        hintElement.style.color = '#ffc107';
+    } else {
+        hintElement.textContent = 'Click to rate this content';
+        hintElement.style.color = '#6c757d';
+    }
 }
 
 function updateModalStars(rating) {
@@ -1252,6 +1285,78 @@ function submitModalRating() {
         submitBtn.disabled = false;
         submitBtn.innerHTML = originalText;
     });
+}
+
+function deleteFeedback(feedbackId) {
+    // Confirm deletion
+    var isOwnFeedback = event.target.closest('#feedback-' + feedbackId).querySelector('.badge.bg-primary') !== null;
+    var confirmMessage = isOwnFeedback ? 
+        'Are you sure you want to delete your review? This action cannot be undone.' :
+        'Are you sure you want to delete this review? This action cannot be undone.';
+    
+    if (!confirm(confirmMessage)) {
+        return;
+    }
+    
+    // Show loading state
+    var feedbackElement = document.getElementById('feedback-' + feedbackId);
+    var deleteBtn = event.target.closest('button');
+    var originalBtnContent = deleteBtn.innerHTML;
+    deleteBtn.disabled = true;
+    deleteBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    
+    // Send delete request
+    fetch('/content/{{ content.id }}/feedback/' + feedbackId + '/delete', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(function(response) {
+        return response.json();
+    })
+    .then(function(data) {
+        if (data.success) {
+            // Remove the feedback element with animation
+            feedbackElement.style.transition = 'opacity 0.3s ease-out, transform 0.3s ease-out';
+            feedbackElement.style.opacity = '0';
+            feedbackElement.style.transform = 'translateX(-20px)';
+            
+            setTimeout(function() {
+                feedbackElement.remove();
+                
+                // Update feedback count in the tab title
+                var reviewsTab = document.getElementById('reviews-tab');
+                var currentCount = {{ feedback_count }};
+                var newCount = currentCount - 1;
+                reviewsTab.textContent = 'Reviews (' + newCount + ')';
+                
+                // Update statistics if stats are displayed
+                updateRatingStats();
+                
+                showNotification('Review deleted successfully', 'success');
+            }, 300);
+        } else {
+            showNotification(data.error || 'Failed to delete review', 'error');
+            // Restore button state
+            deleteBtn.disabled = false;
+            deleteBtn.innerHTML = originalBtnContent;
+        }
+    })
+    .catch(function(error) {
+        console.error('Error:', error);
+        showNotification('Network error. Please try again.', 'warning');
+        // Restore button state
+        deleteBtn.disabled = false;
+        deleteBtn.innerHTML = originalBtnContent;
+    });
+}
+
+function updateRatingStats() {
+    // Reload the page to refresh rating statistics
+    setTimeout(function() {
+        location.reload();
+    }, 1000);
 }
 
 function confirmDelete() {
