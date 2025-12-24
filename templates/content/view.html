@@ -394,9 +394,34 @@
         <div class="col-lg-8">
             <!-- Content Body -->
             <div class="content-body">
-                {% if content.type == 'video' %}
-                    <div class="content-preview mb-4">
-                        {% if content.file_url %}
+                {% if content.external_link %}
+                    {# 优先显示外部链接资源，不管content.type是什么 #}
+                    <div class="content-preview text-center">
+                        {% if content.type == 'video' %}
+                            <i class="fas fa-external-link-alt fa-5x text-info mb-3"></i>
+                            <h4>External Video Resource</h4>
+                            <p class="text-muted">This video is hosted on an external platform</p>
+                        {% elif content.type == 'document' or content.type == 'pdf' %}
+                            <i class="fas fa-external-link-alt fa-5x text-info mb-3"></i>
+                            <h4>External Document Resource</h4>
+                            <p class="text-muted">This document is hosted on an external platform</p>
+                        {% elif content.type == 'presentation' %}
+                            <i class="fas fa-external-link-alt fa-5x text-info mb-3"></i>
+                            <h4>External Presentation Resource</h4>
+                            <p class="text-muted">This presentation is hosted on an external platform</p>
+                        {% else %}
+                            <i class="fas fa-external-link-alt fa-5x text-info mb-3"></i>
+                            <h4>External Resource</h4>
+                            <p class="text-muted">This resource is hosted on an external platform</p>
+                        {% endif %}
+                        <a href="{{ content.external_link }}" class="btn btn-primary btn-lg mt-3" target="_blank">
+                            <i class="fas fa-external-link-alt me-2"></i>Open Resource
+                        </a>
+                    </div>
+                {% elif content.file_url %}
+                    {# 基于实际文件扩展名预览或显示下载 #}
+                    {% if content.file_url.lower().endswith(('.mp4', '.avi', '.mov', '.wmv', '.flv', '.webm', '.mkv')) %}
+                        <div class="content-preview mb-4">
                             <div class="video-container">
                                 <video controls preload="metadata" width="100%" style="max-height: 500px;">
                                     <source src="{{ content.file_url }}" type="video/mp4">
@@ -405,63 +430,101 @@
                                     Your browser does not support the video tag.
                                 </video>
                             </div>
-                        {% else %}
-                            <img src="https://picsum.photos/seed/video{{ content.id }}/800/450.jpg" class="img-fluid rounded" alt="Video thumbnail">
-                        {% endif %}
-                    </div>
-                {% elif content.type == 'document' or content.type == 'pdf' %}
-                    {% if content.file_url %}
-                        <div class="content-preview">
-                            <iframe src="{{ content.file_url }}" class="pdf-viewer" width="100%" height="600px" style="border: 1px solid #ddd;">
-                                <p>Your browser does not support PDFs. 
-                                <a href="{{ content.file_url }}" target="_blank" download>Download the PDF</a>.</p>
-                            </iframe>
                         </div>
-                    {% else %}
-                        <div class="content-preview text-center">
-                            <i class="fas fa-file-pdf fa-5x text-danger mb-3"></i>
-                            <h4>PDF Document</h4>
-                        </div>
-                    {% endif %}
-                {% elif content.type == 'link' %}
-                    <div class="content-preview text-center">
-                        {% if content.external_link %}
-                            <i class="fas fa-external-link-alt fa-5x text-info mb-3"></i>
-                            <h4>External Resource</h4>
-                            <a href="{{ content.external_link }}" class="btn btn-primary btn-lg mt-3" target="_blank">
-                                <i class="fas fa-external-link-alt me-2"></i>Open Resource
-                            </a>
-                        {% else %}
-                            <i class="fas fa-external-link-alt fa-5x text-info mb-3"></i>
-                            <h4>External Resource</h4>
-                            <p class="text-muted">No link available</p>
-                        {% endif %}
-                    </div>
-                {% elif content.type == 'presentation' %}
-                    {% if content.file_url %}
+                    {% elif content.file_url.lower().endswith(('.pdf')) %}
                         <div class="content-preview">
                             <div class="text-center mb-3">
-                                <i class="fas fa-presentation fa-5x text-warning mb-3"></i>
-                                <h4>Presentation</h4>
+                                <i class="fas fa-file-pdf fa-5x text-danger mb-3"></i>
+                                <h4>PDF Document</h4>
+                                <p class="text-muted">This PDF document needs to be downloaded to view</p>
+                                <a href="{{ content.file_url }}" class="btn btn-primary btn-lg btn-custom" target="_blank" download>
+                                    <i class="fas fa-download me-2"></i>Download PDF
+                                </a>
                             </div>
-                            {% if content.file_url.endswith('.pdf') %}
-                                <iframe src="{{ content.file_url }}" class="pdf-viewer" width="100%" height="600px" style="border: 1px solid #ddd;">
-                                    <p>Your browser does not support PDFs. 
-                                    <a href="{{ content.file_url }}" target="_blank">Download the presentation</a>.</p>
-                                </iframe>
-                            {% else %}
-                                <div class="text-center">
-                                    <a href="{{ content.file_url }}" class="btn btn-primary btn-lg btn-custom" target="_blank">
-                                        <i class="fas fa-download me-2"></i>Download Presentation
-                                    </a>
-                                </div>
-                            {% endif %}
+                        </div>
+                    {% elif content.file_url.lower().endswith(('.doc', '.docx')) %}
+                        <div class="content-preview">
+                            <div class="text-center mb-3">
+                                <i class="fas fa-file-word fa-5x text-primary mb-3"></i>
+                                <h4>Word Document</h4>
+                                <p class="text-muted">This Word document needs to be downloaded to view</p>
+                                <a href="{{ content.file_url }}" class="btn btn-primary btn-lg btn-custom" target="_blank" download>
+                                    <i class="fas fa-download me-2"></i>Download Document
+                                </a>
+                            </div>
+                        </div>
+                    {% elif content.file_url.lower().endswith(('.txt', '.rtf')) %}
+                        <div class="content-preview">
+                            <div class="text-center mb-3">
+                                <i class="fas fa-file-alt fa-5x text-info mb-3"></i>
+                                <h4>Text Document</h4>
+                                <p class="text-muted">This text document needs to be downloaded to view</p>
+                                <a href="{{ content.file_url }}" class="btn btn-primary btn-lg btn-custom" target="_blank" download>
+                                    <i class="fas fa-download me-2"></i>Download Document
+                                </a>
+                            </div>
+                        </div>
+                    {% elif content.file_url.lower().endswith(('.ppt', '.pptx')) %}
+                        <div class="content-preview">
+                            <div class="text-center mb-3">
+                                <i class="fas fa-file-powerpoint fa-5x text-warning mb-3"></i>
+                                <h4>PowerPoint Presentation</h4>
+                                <p class="text-muted">This PowerPoint presentation needs to be downloaded to view</p>
+                                <a href="{{ content.file_url }}" class="btn btn-primary btn-lg btn-custom" target="_blank" download>
+                                    <i class="fas fa-download me-2"></i>Download Presentation
+                                </a>
+                            </div>
+                        </div>
+                    {% elif content.file_url.lower().endswith(('.odt')) %}
+                        <div class="content-preview">
+                            <div class="text-center mb-3">
+                                <i class="fas fa-file-alt fa-5x text-secondary mb-3"></i>
+                                <h4>OpenDocument Text</h4>
+                                <p class="text-muted">This ODT document needs to be downloaded to view</p>
+                                <a href="{{ content.file_url }}" class="btn btn-primary btn-lg btn-custom" target="_blank" download>
+                                    <i class="fas fa-download me-2"></i>Download Document
+                                </a>
+                            </div>
+                        </div>
+                    {% elif content.file_url.lower().endswith(('.odp')) %}
+                        <div class="content-preview">
+                            <div class="text-center mb-3">
+                                <i class="fas fa-file-powerpoint fa-5x text-secondary mb-3"></i>
+                                <h4>OpenDocument Presentation</h4>
+                                <p class="text-muted">This ODP presentation needs to be downloaded to view</p>
+                                <a href="{{ content.file_url }}" class="btn btn-primary btn-lg btn-custom" target="_blank" download>
+                                    <i class="fas fa-download me-2"></i>Download Presentation
+                                </a>
+                            </div>
+                        </div>
+                    {% else %}
+                        <div class="content-preview">
+                            <div class="text-center mb-3">
+                                <i class="fas fa-file fa-5x text-secondary mb-3"></i>
+                                <h4>File</h4>
+                                <p class="text-muted">This file needs to be downloaded to view</p>
+                                <a href="{{ content.file_url }}" class="btn btn-primary btn-lg btn-custom" target="_blank" download>
+                                    <i class="fas fa-download me-2"></i>Download File
+                                </a>
+                            </div>
                         </div>
                     {% endif %}
                 {% else %}
                     <div class="content-preview text-center">
-                        <i class="fas fa-file fa-5x text-secondary mb-3"></i>
-                        <h4>Resource</h4>
+                        {% if content.type == 'video' %}
+                            <i class="fas fa-video fa-5x text-secondary mb-3"></i>
+                            <h4>Video</h4>
+                        {% elif content.type == 'document' or content.type == 'pdf' %}
+                            <i class="fas fa-file fa-5x text-secondary mb-3"></i>
+                            <h4>Document</h4>
+                        {% elif content.type == 'presentation' %}
+                            <i class="fas fa-presentation fa-5x text-secondary mb-3"></i>
+                            <h4>Presentation</h4>
+                        {% else %}
+                            <i class="fas fa-file fa-5x text-secondary mb-3"></i>
+                            <h4>Resource</h4>
+                        {% endif %}
+                        <p class="text-muted">No file or link available</p>
                     </div>
                 {% endif %}
                 
@@ -470,18 +533,17 @@
                     <p class="lead">{{ content.description }}</p>
                 </div>
 
-                {% if content.external_link or content.file_url %}
-                    <div class="text-center mt-4">
-                        {% if content.external_link %}
-                            <a href="{{ content.external_link }}" class="btn btn-primary btn-lg btn-custom" target="_blank">
-                                <i class="fas fa-external-link-alt me-2"></i>Open Resource
+                {% if content.file_url %}
+                    <!-- Only show download button here for files that don't already have one in content-preview -->
+                    <!-- Files that already have download buttons in preview: doc, docx, txt, rtf, ppt, pptx, odt, odp, and other files -->
+                    {% if content.file_url.lower().endswith(('.mp4', '.avi', '.mov', '.wmv', '.flv', '.webm', '.mkv')) %}
+                        <!-- Video files have preview player but no download button -->
+                        <div class="text-center mt-4">
+                            <a href="{{ content.file_url }}" class="btn btn-primary btn-lg btn-custom" target="_blank" download>
+                                <i class="fas fa-download me-2"></i>Download Video
                             </a>
-                        {% elif content.file_url %}
-                            <a href="{{ content.file_url }}" class="btn btn-primary btn-lg btn-custom" target="_blank">
-                                <i class="fas fa-download me-2"></i>Download
-                            </a>
-                        {% endif %}
-                    </div>
+                        </div>
+                    {% endif %}
                 {% endif %}
             </div>
 
@@ -495,8 +557,12 @@
                     <button class="btn btn-outline-success btn-custom" onclick="markAsCompleted()">
                         <i class="fas fa-check me-2"></i>Mark as Completed
                     </button>
-                    <button class="btn btn-outline-warning btn-custom" onclick="bookmarkContent()">
-                        <i class="fas fa-bookmark me-2"></i>Bookmark
+                    <button id="bookmarkBtn" class="btn btn-outline-warning btn-custom" onclick="toggleBookmark()">
+                        {% if is_bookmarked %}
+                            <i class="fas fa-bookmark-fill me-2"></i>Unbookmark
+                        {% else %}
+                            <i class="fas fa-bookmark me-2"></i>Bookmark
+                        {% endif %}
                     </button>
                     <button class="btn btn-outline-info btn-custom" onclick="shareContent()">
                         <i class="fas fa-share me-2"></i>Share
@@ -547,7 +613,7 @@
                 <li class="nav-item" role="presentation">
                     <button class="nav-link" id="reviews-tab" data-bs-toggle="tab" data-bs-target="#reviews" type="button" role="tab" aria-controls="reviews" aria-selected="false">All Reviews ({{ feedback_count }})</button>
                 </li>
-                {% if session.user_role == 'admin' or (session.user_role == 'instructor' and content.uploaded_by == session.user_id) %}
+                {% if session.get('user_role') == 'admin' or (session.get('user_role') == 'instructor' and content.uploaded_by == session.get('user_id')) %}
                 <li class="nav-item" role="presentation">
                     <button class="nav-link" id="management-tab" data-bs-toggle="tab" data-bs-target="#management" type="button" role="tab" aria-controls="management" aria-selected="false">Management</button>
                 </li>
@@ -600,7 +666,7 @@
                                             {% endfor %}
                                         </div>
                                     </div>
-                                    {% if session.user_id == feedback.user_id or session.user_role == 'admin' %}
+                                    {% if session.get('user_id') == feedback.user_id or session.get('user_role') == 'admin' %}
                                     <div class="feedback-actions">
                                         <button class="feedback-delete-btn" 
                                                 onclick="deleteFeedback({{ feedback.id }})"
@@ -638,7 +704,7 @@
                 </div>
 
                 <!-- Management Tab -->
-                {% if session.user_role == 'admin' or (session.user_role == 'instructor' and content.uploaded_by == session.user_id) %}
+                {% if session.get('user_role') == 'admin' or (session.get('user_role') == 'instructor' and content.uploaded_by == session.get('user_id')) %}
                 <div class="tab-pane fade" id="management" role="tabpanel">
                     <div class="mt-4">
                         <h5><i class="fas fa-cog me-2"></i>Content Management</h5>
@@ -653,7 +719,7 @@
                                     </div>
                                 </a>
                             </div>
-                            {% if session.user_role == 'admin' %}
+                            {% if session.get('user_role') == 'admin' %}
                             <div class="col-md-6">
                                 <button class="btn btn-outline-danger btn-management w-100 h-100 d-flex align-items-center justify-content-center" 
                                         onclick="confirmDelete()" data-bs-toggle="tooltip" data-bs-placement="top" 
@@ -679,7 +745,7 @@
                                         Edit content details, tags, and categorization
                                     </small>
                                 </div>
-                                {% if session.user_role == 'admin' %}
+                                {% if session.get('user_role') == 'admin' %}
                                 <div class="col-md-6">
                                     <small class="text-muted">
                                         <i class="fas fa-trash-alt text-danger me-1"></i>
@@ -924,8 +990,45 @@ function markAsCompleted() {
     recordActivity('completed');
 }
 
-function bookmarkContent() {
-    recordActivity('bookmarked');
+function toggleBookmark() {
+    const bookmarkBtn = document.getElementById('bookmarkBtn');
+    const contentId = {{ content.id }};
+    
+    // Show loading state
+    bookmarkBtn.disabled = true;
+    const originalHtml = bookmarkBtn.innerHTML;
+    bookmarkBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Processing...';
+    
+    fetch(`/content/${contentId}/bookmark`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Update button state
+            if (data.is_bookmarked) {
+                bookmarkBtn.className = 'btn btn-warning btn-custom';
+                bookmarkBtn.innerHTML = '<i class="fas fa-bookmark-fill me-2"></i>Unbookmark';
+            } else {
+                bookmarkBtn.className = 'btn btn-outline-warning btn-custom';
+                bookmarkBtn.innerHTML = '<i class="fas fa-bookmark me-2"></i>Bookmark';
+            }
+            showNotification(data.message, 'success');
+        } else {
+            showNotification(data.error || 'Failed to toggle bookmark', 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error toggling bookmark:', error);
+        showNotification('Failed to toggle bookmark', 'error');
+    })
+    .finally(() => {
+        bookmarkBtn.disabled = false;
+    });
 }
 
 function shareContent() {

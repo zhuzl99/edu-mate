@@ -29,13 +29,13 @@
     <div class="d-sm-flex align-items-center justify-content-between mb-4">
         <div>
             <h1 class="h3 mb-0 text-gray-800">Browse Content</h1>
-            {% if session.user_role == 'admin' %}
+            {% if session.get('user_role') == 'admin' %}
             <small class="text-muted">
                 <i class="fas fa-info-circle"></i> As an administrator, you can see all content including unpublished drafts for moderation.
             </small>
             {% endif %}
         </div>
-        {% if session.user_role == 'instructor' or session.user_role == 'admin' %}
+        {% if session.get('user_role') == 'instructor' or session.get('user_role') == 'admin' %}
         <a href="{{ url_for('content.upload') }}" class="btn btn-primary">
             <i class="fas fa-plus"></i> Upload Content
         </a>
@@ -159,7 +159,7 @@
                     </span>
                     
                     <!-- Admin: Show publish status -->
-                    {% if session.user_role == 'admin' %}
+                    {% if session.get('user_role') == 'admin' %}
                         {% if not item.is_published %}
                         <span class="badge badge-warning" style="position: absolute; top: 45px; right: 10px;">
                             <i class="fas fa-eye-slash"></i> Draft
@@ -202,7 +202,7 @@
                                 </small>
                             </div>
                             <div class="col-4 text-right">
-                                {% if session.user_role == 'admin' %}
+                                {% if session.get('user_role') == 'admin' %}
                                     <!-- Admin actions -->
                                     <div class="btn-group" role="group">
                                         <a href="{{ url_for('content.view', content_id=item.id) }}" class="btn btn-sm btn-primary">
@@ -292,7 +292,7 @@
                 Try adjusting your search criteria or filters.
             {% else %}
                 No content has been added to the platform yet.
-                {% if session.user_role == 'instructor' or session.user_role == 'admin' %}
+                {% if session.get('user_role') == 'instructor' or session.get('user_role') == 'admin' %}
                 <a href="{{ url_for('content.upload') }}" class="btn btn-primary ml-2">
                     <i class="fas fa-plus"></i> Add Content
                 </a>

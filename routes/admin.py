@@ -382,8 +382,6 @@ def toggle_content(content_id):
         return redirect(url_for('admin.content'))
     
     try:
-        cursor = connection.cursor()
-        
         # Get current status
         cursor.execute("SELECT is_published FROM content WHERE id = ?", (content_id,))
         content = cursor.fetchone()
@@ -406,3 +404,43 @@ def toggle_content(content_id):
         flash(f'Error updating content: {err}', 'error')
     
     return redirect(url_for('admin.content'))
+
+@admin_bp.route('/clear-bookmarks', methods=['POST'])
+@admin_required
+def clear_bookmarks():
+    """Clear all bookmarked content for all users"""
+    connection = get_db_connection()
+    if not connection:
+        flash('Database connection failed', 'error')
+        return redirect(url_for('admin.dashboard'))
+    
+    try:
+        cursor = connection.cursor()
+        
+        # Count bookmarks before deletion
+        cursor.execute("SELECT COUNT(*) as count FROM user_activities WHERE activity_type = 'bookmarked'")
+        bookmark_count = cursor.fetchone()['count']
+        
+        if bookmark_count == 0:
+            flash('No bookmarks found to clear', 'info')
+            return redirect(url_for('admin.dashboard'))
+        
+        # Delete all bookmarked activities
+        cursor.execute("DELETE FROM user_activities WHERE activity_type = 'bookmarked'")
+        
+        # Log the action
+        cursor.execute("""
+            INSERT INTO system_logs (user_id, action, resource_type, resource_id, created_at)
+            VALUES (?, ?, ?, ?, ?)
+        """, (session['user_id'], 'CLEARED_ALL_BOOKMARKS', 'bookmarks', None, datetime.now()))
+        
+        connection.commit()
+        cursor.close()
+        connection.close()
+        
+        flash(f'Successfully cleared {bookmark_count} bookmark records!', 'success')
+        return redirect(url_for('admin.dashboard'))
+        
+    except Exception as err:
+        flash(f'Error clearing bookmarks: {err}', 'error')
+        return redirect(url_for('admin.dashboard'))

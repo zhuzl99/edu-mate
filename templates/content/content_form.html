@@ -1293,25 +1293,7 @@
                                 </div>
                             </div>
                             {% else %}
-                            <!-- reCAPTCHA Section (Upload Mode Only) -->
-                            <div class="form-section">
-                                <h5 class="section-title">
-                                    <i class="fas fa-shield-alt"></i>
-                                    Security Verification
-                                </h5>
-                                
-                                <div class="text-center p-4 bg-light rounded-3">
-                                    <i class="fas fa-robot fa-3x text-muted mb-3"></i>
-                                    <h6 class="mb-2">Verify You're Human</h6>
-                                    <p class="text-muted mb-3">Please complete the captcha below to proceed with uploading</p>
-                                    
-                                    <!-- reCAPTCHA placeholder -->
-                                    <div class="g-recaptcha" data-sitekey="YOUR_RECAPTCHA_SITE_KEY" 
-                                         style="display: inline-block; border: 2px dashed #667eea; padding: 20px; border-radius: 10px; background: white;">
-                                        <span class="text-muted">reCAPTCHA would appear here</span>
-                                    </div>
-                                </div>
-                            </div>
+
                             {% endif %}
 
                             <!-- Action Buttons Section -->
@@ -1584,23 +1566,27 @@ function handleFileSelect(event) {
     } else if (fileNameLower.endsWith('.doc') || fileNameLower.endsWith('.docx')) {
         // Word documents can be either documents or presentations
         const typeSelector = document.getElementById('type');
-        if (typeSelector.value === '' || typeSelector.value === 'document') {
-            detectedType = 'document';
-            message = 'Word document detected (can also be used as presentation)';
-        } else if (typeSelector.value === 'presentation') {
+        const currentType = typeSelector.value;
+        
+        if (currentType === 'presentation') {
+            // User explicitly chose presentation, keep it
             detectedType = 'presentation';
-            message = 'Word document detected for presentation use';
+            message = 'Word document set as presentation';
         } else {
+            // Default to document for better accuracy
             detectedType = 'document';
-            message = 'Word document detected (can also be used as presentation)';
+            message = 'Word document detected';
         }
     }
     
-    // Update content type selector if it's empty or doesn't match
-    const typeSelector = document.getElementById('type');
-    if (typeSelector.value === '' || (typeSelector.value === 'link' && detectedType !== 'link')) {
-        typeSelector.value = detectedType;
-        showNotification(`Content type automatically set to: ${detectedType}. ${message}`, 'info');
+    // Always update content type selector to match the detected file type
+    const finalTypeSelector = document.getElementById('type');
+    const currentTypeValue = finalTypeSelector.value;
+    
+    // Force update the content type to match the detected file type
+    if (currentTypeValue !== detectedType && detectedType !== 'link') {
+        finalTypeSelector.value = detectedType;
+        showNotification(`Content type automatically corrected to: ${detectedType}. ${message}`, 'info');
     }
     
     // Show preview container

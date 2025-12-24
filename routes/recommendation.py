@@ -233,13 +233,27 @@ def api_click(content_id):
             AND created_at >= date('now', '-1 day')
         """, (session['user_id'], content_id))
         
-        # Log user activity
+        # Log user activity - check if exists first
         cursor.execute("""
-            INSERT INTO user_activities (user_id, content_id, activity_type, created_at)
-            VALUES (?, ?, ?, ?)
-            ON DUPLICATE KEY UPDATE 
-            activity_type = 'viewed', created_at = ?
-        """, (session['user_id'], content_id, 'viewed', datetime.now(), datetime.now()))
+            SELECT id FROM user_activities 
+            WHERE user_id = ? AND content_id = ? AND activity_type = 'viewed'
+        """, (session['user_id'], content_id))
+        
+        existing_activity = cursor.fetchone()
+        
+        if existing_activity:
+            # Update existing activity timestamp
+            cursor.execute("""
+                UPDATE user_activities 
+                SET created_at = ?
+                WHERE id = ?
+            """, (datetime.now(), existing_activity['id']))
+        else:
+            # Insert new activity record
+            cursor.execute("""
+                INSERT INTO user_activities (user_id, content_id, activity_type, created_at)
+                VALUES (?, ?, ?, ?)
+            """, (session['user_id'], content_id, 'viewed', datetime.now()))
         
         connection.commit()
         cursor.close()

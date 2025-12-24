@@ -29,16 +29,25 @@ def allowed_file(filename, content_type):
     # Get the file extension (everything after the last dot)
     ext = filename.rsplit('.', 1)[1].lower().strip()
     
-    # Remove any trailing spaces or special characters that might have been introduced
-    ext = ''.join(c for c in ext if c.isalnum())
+    # Debug logging before cleaning
+    current_app.logger.debug(f'Original filename: {repr(filename)}')
+    current_app.logger.debug(f'Original extension: {repr(ext)}')
     
-    # Debug logging with Unicode-safe representation
-    current_app.logger.debug(f'Checking file: {repr(filename)}, extension: {ext}, content_type: {content_type}')
+    # Only remove spaces, keep valid extension characters (letters, numbers)
+    ext = ext.strip()
+    # Remove any whitespace within the extension (shouldn't happen, but just in case)
+    ext = ''.join(c for c in ext if not c.isspace())
+    
+    # Debug logging after cleaning
+    current_app.logger.debug(f'Cleaned extension: {repr(ext)}, content_type: {content_type}')
     
     if content_type in ALLOWED_EXTENSIONS:
         allowed_exts = ALLOWED_EXTENSIONS[content_type]
         current_app.logger.debug(f'Available extensions for {content_type}: {allowed_exts}')
         current_app.logger.debug(f'Extension {ext} in allowed set: {ext in allowed_exts}')
+        current_app.logger.debug(f'Type of ext: {type(ext)}, len of ext: {len(ext)}')
+        current_app.logger.debug(f'Direct comparison: ext == "docx": {ext == "docx"}')
+        current_app.logger.debug(f'Contains check: "docx" in allowed_exts: {"docx" in allowed_exts}')
         return ext in allowed_exts
     
     # If content_type is not recognized, allow common file types
@@ -249,7 +258,7 @@ def upload():
             tags = request.form.getlist('tags')
             external_link = request.form.get('external_link')
             source_type = request.form.get('source_type')
-            publish_now = request.form.get('publish_now') == 'checked'
+            publish_now = request.form.get('publish_now') is not None
             
             # Validation
             if not all([title, content_type, difficulty]):
@@ -361,7 +370,40 @@ def upload_file():
     if file.filename == '':
         return jsonify({'error': 'No file selected'}), 400
     
-    content_type = request.form.get('content_type', 'video')
+    # Get content_type from form or detect from file extension
+    provided_content_type = request.form.get('content_type', '').strip()
+    filename_lower = file.filename.lower()
+    
+    # Always validate if the provided content type matches the file extension
+    # If not provided or doesn't match, auto-detect based on extension
+    detected_type = None
+    if filename_lower.endswith(('.mp4', '.avi', '.mov', '.wmv', '.flv', '.webm', '.mkv')):
+        detected_type = 'video'
+    elif filename_lower.endswith(('.pdf', '.doc', '.docx', '.txt', '.rtf', '.odt')):
+        detected_type = 'document'
+    elif filename_lower.endswith(('.ppt', '.pptx', '.odp', '.key')):
+        detected_type = 'presentation'
+    else:
+        detected_type = 'document'  # Default fallback
+    
+    current_app.logger.debug(f'File extension detection for: {filename_lower}')
+    current_app.logger.debug(f'Detected content type: {detected_type}')
+    current_app.logger.debug(f'Provided content type: {provided_content_type}')
+    
+    # Use provided type if it's valid and matches, otherwise use detected type
+    if provided_content_type and provided_content_type != '':
+        # Check if provided type matches detected type
+        if provided_content_type == detected_type:
+            content_type = provided_content_type
+            current_app.logger.debug(f'Using provided content type: {content_type}')
+        else:
+            # Provided type doesn't match file extension, use detected type
+            content_type = detected_type
+            current_app.logger.debug(f'Provided type {provided_content_type} does not match detected type {detected_type}, using detected type')
+    else:
+        # No content type provided, use detected type
+        content_type = detected_type
+        current_app.logger.debug(f'No content type provided, using detected type: {content_type}')
     
     # Debug logging
     current_app.logger.debug(f'Upload request - filename: {file.filename}, content_type: {content_type}')
@@ -414,18 +456,31 @@ def view(content_id):
     try:
         cursor = connection.cursor()
         
-        # Get content details
-        cursor.execute("""
-            SELECT 
-                c.*,
-                cat.name as category_name,
-                u.full_name as uploader_name,
-                u.username as uploader_username
-            FROM content c
-            LEFT JOIN categories cat ON c.category_id = cat.id
-            LEFT JOIN users u ON c.uploaded_by = u.id
-            WHERE c.id = ? AND c.is_published = 1
-        """, (content_id,))
+        # Get content details - admins can see all content, others only see published content
+        if session.get('user_role') == 'admin':
+            cursor.execute("""
+                SELECT 
+                    c.*,
+                    cat.name as category_name,
+                    u.full_name as uploader_name,
+                    u.username as uploader_username
+                FROM content c
+                LEFT JOIN categories cat ON c.category_id = cat.id
+                LEFT JOIN users u ON c.uploaded_by = u.id
+                WHERE c.id = ?
+            """, (content_id,))
+        else:
+            cursor.execute("""
+                SELECT 
+                    c.*,
+                    cat.name as category_name,
+                    u.full_name as uploader_name,
+                    u.username as uploader_username
+                FROM content c
+                LEFT JOIN categories cat ON c.category_id = cat.id
+                LEFT JOIN users u ON c.uploaded_by = u.id
+                WHERE c.id = ? AND c.is_published = 1
+            """, (content_id,))
         
         content = cursor.fetchone()
         
@@ -440,11 +495,27 @@ def view(content_id):
             WHERE id = ?
         """, (content_id,))
         
-        # Log user activity (SQLite uses INSERT OR REPLACE for ON DUPLICATE KEY)
+        # Log user activity - check if exists first
         cursor.execute("""
-            INSERT OR REPLACE INTO user_activities (user_id, content_id, activity_type, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?)
-        """, (session['user_id'], content_id, 'viewed', datetime.now(), datetime.now()))
+            SELECT id FROM user_activities 
+            WHERE user_id = ? AND content_id = ? AND activity_type = 'viewed'
+        """, (session['user_id'], content_id))
+        
+        existing_activity = cursor.fetchone()
+        
+        if existing_activity:
+            # Update existing activity timestamp
+            cursor.execute("""
+                UPDATE user_activities 
+                SET created_at = ?
+                WHERE id = ?
+            """, (datetime.now(), existing_activity['id']))
+        else:
+            # Insert new activity record
+            cursor.execute("""
+                INSERT INTO user_activities (user_id, content_id, activity_type, created_at)
+                VALUES (?, ?, ?, ?)
+            """, (session['user_id'], content_id, 'viewed', datetime.now()))
         
         # Get user's rating for this content
         cursor.execute("""
@@ -456,6 +527,15 @@ def view(content_id):
         """, (content_id, session['user_id']))
         
         user_feedback = cursor.fetchone()
+        
+        # Check if user has bookmarked this content
+        cursor.execute("""
+            SELECT id FROM user_activities 
+            WHERE user_id = ? AND content_id = ? AND activity_type = 'bookmarked'
+        """, (session['user_id'], content_id))
+        
+        user_bookmark = cursor.fetchone()
+        is_bookmarked = user_bookmark is not None
         
         # Get all feedback for this content with pagination support
         cursor.execute("""
@@ -529,7 +609,8 @@ def view(content_id):
                              feedback_stats=feedback_stats,
                              related_content=related_content,
                              uploader_name=uploader_name,
-                             user_activity=user_activity)
+                             user_activity=user_activity,
+                             is_bookmarked=is_bookmarked)
     
     except Exception as err:
         flash(f'Error loading content: {err}', 'error')
@@ -640,22 +721,43 @@ def record_activity(content_id):
         if activity_type not in valid_activities:
             return jsonify({'error': 'Invalid activity type'}), 400
         
-        # Check if content exists
-        content = connection.execute(
-            "SELECT id FROM content WHERE id = ? AND is_published = 1",
-            (content_id,)
-        ).fetchone()
+        # Check if content exists - admins can access all content, others only published content
+        if session.get('user_role') == 'admin':
+            content = connection.execute(
+                "SELECT id FROM content WHERE id = ?",
+                (content_id,)
+            ).fetchone()
+        else:
+            content = connection.execute(
+                "SELECT id FROM content WHERE id = ? AND is_published = 1",
+                (content_id,)
+            ).fetchone()
         
         if not content:
             return jsonify({'error': 'Content not found'}), 404
         
-        # Record the activity using INSERT OR REPLACE to handle duplicates
+        # Record the activity - check if exists first, then update or insert
         cursor = connection.cursor()
         cursor.execute("""
-            INSERT OR REPLACE INTO user_activities 
-            (user_id, content_id, activity_type, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?)
-        """, (session['user_id'], content_id, activity_type, datetime.now(), datetime.now()))
+            SELECT id FROM user_activities 
+            WHERE user_id = ? AND content_id = ? AND activity_type = ?
+        """, (session['user_id'], content_id, activity_type))
+        
+        existing_activity = cursor.fetchone()
+        
+        if existing_activity:
+            # Update existing activity timestamp
+            cursor.execute("""
+                UPDATE user_activities 
+                SET created_at = ?
+                WHERE id = ?
+            """, (datetime.now(), existing_activity['id']))
+        else:
+            # Insert new activity record
+            cursor.execute("""
+                INSERT INTO user_activities (user_id, content_id, activity_type, created_at)
+                VALUES (?, ?, ?, ?)
+            """, (session['user_id'], content_id, activity_type, datetime.now()))
         
         connection.commit()
         cursor.close()
@@ -665,6 +767,93 @@ def record_activity(content_id):
     
     except Exception as err:
         current_app.logger.error(f"Error recording activity: {err}")
+        return jsonify({'error': str(err)}), 500
+
+@content_bp.route('/<int:content_id>/bookmark', methods=['POST'])
+def toggle_bookmark(content_id):
+    """Toggle bookmark status for content"""
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({'error': 'Database error'}), 500
+    
+    try:
+        cursor = connection.cursor()
+        
+        # Check if content exists and is accessible
+        if session.get('user_role') == 'admin':
+            content = connection.execute(
+                "SELECT id FROM content WHERE id = ?",
+                (content_id,)
+            ).fetchone()
+        else:
+            content = connection.execute(
+                "SELECT id FROM content WHERE id = ? AND is_published = 1",
+                (content_id,)
+            ).fetchone()
+        
+        if not content:
+            return jsonify({'error': 'Content not found'}), 404
+        
+        # Check if already bookmarked
+        cursor.execute("""
+            SELECT id FROM user_activities 
+            WHERE user_id = ? AND content_id = ? AND activity_type = 'bookmarked'
+        """, (session['user_id'], content_id))
+        
+        existing_bookmark = cursor.fetchone()
+        
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        
+        if existing_bookmark:
+            # Remove bookmark
+            cursor.execute("""
+                DELETE FROM user_activities 
+                WHERE user_id = ? AND content_id = ? AND activity_type = 'bookmarked'
+            """, (session['user_id'], content_id))
+            
+            action = 'UNBOOKMARKED'
+            message = 'Bookmark removed successfully'
+            is_bookmarked = False
+        else:
+            # Add bookmark (check for duplicates first, then insert)
+            cursor.execute("""
+                SELECT id FROM user_activities 
+                WHERE user_id = ? AND content_id = ? AND activity_type = 'bookmarked'
+            """, (session['user_id'], content_id))
+            
+            existing = cursor.fetchone()
+            if not existing:
+                cursor.execute("""
+                    INSERT INTO user_activities 
+                    (user_id, content_id, activity_type, created_at)
+                    VALUES (?, ?, ?, ?)
+                """, (session['user_id'], content_id, 'bookmarked', current_time))
+            
+            action = 'BOOKMARKED'
+            message = 'Content bookmarked successfully'
+            is_bookmarked = True
+        
+        # Log the action
+        cursor.execute("""
+            INSERT INTO system_logs (user_id, action, resource_type, resource_id, created_at)
+            VALUES (?, ?, ?, ?, ?)
+        """, (session['user_id'], action, 'bookmark', content_id, datetime.now()))
+        
+        connection.commit()
+        cursor.close()
+        connection.close()
+        
+        return jsonify({
+            'success': True, 
+            'message': message,
+            'is_bookmarked': is_bookmarked
+        })
+    
+    except Exception as err:
+        current_app.logger.error(f"Error toggling bookmark: {err}")
         return jsonify({'error': str(err)}), 500
 
 @content_bp.route('/<int:content_id>/feedback/<int:feedback_id>/delete', methods=['POST'])
@@ -759,6 +948,7 @@ def edit(content_id):
         flash('Database error', 'error')
         return redirect(url_for('content.view', content_id=content_id))
     
+    cursor = None
     try:
         cursor = connection.cursor()
         
@@ -795,12 +985,13 @@ def edit(content_id):
             tags = request.form.get('tags')
             external_link = request.form.get('external_link')
             source_type = request.form.get('source_type')
-            publish_now = request.form.get('publish_now') == 'checked'
+            publish_now = request.form.get('publish_now') is not None
             
             # Validation
             if not title:
                 flash('Title is required', 'error')
-                return render_template('content/edit.html', 
+                return render_template('content/content_form.html', 
+                                    is_edit=True,
                                     content=content, 
                                     categories=categories)
             
@@ -853,8 +1044,6 @@ def edit(content_id):
             ))
             
             connection.commit()
-            cursor.close()
-            connection.close()
             
             # Redirect based on publish status
             if publish_now:
@@ -864,8 +1053,7 @@ def edit(content_id):
                 flash('Content updated and saved as draft successfully!', 'success')
                 return redirect(url_for('content.browse'))
         
-        cursor.close()
-        connection.close()
+        # GET request - show edit form
         return render_template('content/content_form.html', 
                             is_edit=True, 
                             content=content, 
@@ -874,6 +1062,12 @@ def edit(content_id):
     except Exception as err:
         flash(f'Error editing content: {err}', 'error')
         return redirect(url_for('content.view', content_id=content_id))
+    finally:
+        # Ensure cursor and connection are properly closed
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
 
 @content_bp.route('/<int:content_id>/delete', methods=['POST'])
 def delete_content(content_id):
@@ -951,14 +1145,26 @@ def api_search():
     try:
         cursor = connection.cursor()
         
-        cursor.execute("""
-            SELECT id, title, description, type, category_id
-            FROM content 
-            WHERE is_published = 1 
-            AND (title LIKE ? OR description LIKE ?)
-            ORDER BY title
-            LIMIT 10
-        """, (f'%{query}%', f'%{query}%'))
+        # Build query based on user role
+        if session.get('user_role') == 'admin':
+            # Admins can search all content
+            cursor.execute("""
+                SELECT id, title, description, type, category_id
+                FROM content 
+                WHERE (title LIKE ? OR description LIKE ?)
+                ORDER BY title
+                LIMIT 10
+            """, (f'%{query}%', f'%{query}%'))
+        else:
+            # Others only see published content
+            cursor.execute("""
+                SELECT id, title, description, type, category_id
+                FROM content 
+                WHERE is_published = 1 
+                AND (title LIKE ? OR description LIKE ?)
+                ORDER BY title
+                LIMIT 10
+            """, (f'%{query}%', f'%{query}%'))
         
         results = cursor.fetchall()
         cursor.close()
