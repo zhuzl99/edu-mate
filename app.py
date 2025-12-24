@@ -415,25 +415,17 @@ def dashboard():
                 WHERE ua.user_id = ? AND ua.activity_type = 'completed'
             """, (session['user_id'],)).fetchone()['count']
             
-            # 3. In Progress - content accessed but not completed
+            # 3. In Progress - content currently being studied
             in_progress_count = connection.execute("""
                 SELECT COUNT(DISTINCT ua.content_id) as count 
                 FROM user_activities ua 
-                WHERE ua.user_id = ? AND ua.activity_type != 'completed'
-            """, (session['user_id'],)).fetchone()['count']
-            
-            # 4. Achievements - count of positive ratings given or milestones
-            achievements_count = connection.execute("""
-                SELECT COUNT(*) as count 
-                FROM content_feedback cf 
-                WHERE cf.user_id = ? AND cf.rating >= 4
+                WHERE ua.user_id = ? AND ua.activity_type = 'in_progress'
             """, (session['user_id'],)).fetchone()['count']
             
             user_stats = {
                 'learning_progress': learning_progress,
                 'completed_count': completed_count,
-                'in_progress_count': in_progress_count,
-                'achievements_count': achievements_count
+                'in_progress_count': in_progress_count
             }
             
             # Get bookmarked content

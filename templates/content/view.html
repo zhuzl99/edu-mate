@@ -960,6 +960,7 @@ function recordActivity(activityType) {
         if (data.success) {
             var messages = {
                 'viewed': 'Marked as viewed!',
+                'in_progress': 'Marked as in progress!',
                 'completed': 'Marked as completed!',
                 'bookmarked': 'Added to bookmarks!'
             };
@@ -1212,10 +1213,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
     
-    // Show notification when page loads to indicate content has been viewed
-    setTimeout(function() {
-        showNotification('Content marked as viewed', 'info');
-    }, 1000);
+    // No automatic view notification - user must manually mark as viewed
     
     // Initialize long comment handling
     initializeLongComments();

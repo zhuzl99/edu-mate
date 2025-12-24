@@ -717,9 +717,52 @@ def record_activity(content_id):
             activity_type = request.form.get('activity_type', 'viewed')
         
         # Validate activity type
-        valid_activities = ['viewed', 'completed', 'bookmarked']
+        valid_activities = ['viewed', 'completed', 'bookmarked', 'in_progress']
         if activity_type not in valid_activities:
             return jsonify({'error': 'Invalid activity type'}), 400
+        
+        # Special handling for viewed and completed activities
+        cursor = connection.cursor()
+        
+        if activity_type == 'viewed':
+            # Check if content is already in progress
+            cursor.execute("""
+                SELECT activity_type FROM user_activities 
+                WHERE user_id = ? AND content_id = ? AND activity_type = 'in_progress'
+            """, (session['user_id'], content_id))
+            existing_in_progress = cursor.fetchone()
+            
+            if existing_in_progress:
+                # Already in progress, just update timestamp
+                activity_type = 'in_progress'
+            else:
+                # Set to in progress when viewed for first time
+                activity_type = 'in_progress'
+        
+        elif activity_type == 'completed':
+            # When marking as completed, check if there's an in_progress record to update
+            cursor.execute("""
+                SELECT id FROM user_activities 
+                WHERE user_id = ? AND content_id = ? AND activity_type = 'in_progress'
+            """, (session['user_id'], content_id))
+            in_progress_record = cursor.fetchone()
+            
+            if in_progress_record:
+                # Update existing in_progress to completed
+                cursor.execute("""
+                    UPDATE user_activities 
+                    SET activity_type = 'completed', created_at = ?
+                    WHERE id = ?
+                """, (datetime.now(), in_progress_record['id']))
+                
+                connection.commit()
+                cursor.close()
+                connection.close()
+                
+                return jsonify({'success': True, 'message': 'Activity updated to completed'})
+            else:
+                # No in_progress record found, just insert completed
+                pass
         
         # Check if content exists - admins can access all content, others only published content
         if session.get('user_role') == 'admin':
@@ -736,28 +779,12 @@ def record_activity(content_id):
         if not content:
             return jsonify({'error': 'Content not found'}), 404
         
-        # Record the activity - check if exists first, then update or insert
-        cursor = connection.cursor()
+        # Record the activity using INSERT OR REPLACE to handle duplicates
         cursor.execute("""
-            SELECT id FROM user_activities 
-            WHERE user_id = ? AND content_id = ? AND activity_type = ?
-        """, (session['user_id'], content_id, activity_type))
-        
-        existing_activity = cursor.fetchone()
-        
-        if existing_activity:
-            # Update existing activity timestamp
-            cursor.execute("""
-                UPDATE user_activities 
-                SET created_at = ?
-                WHERE id = ?
-            """, (datetime.now(), existing_activity['id']))
-        else:
-            # Insert new activity record
-            cursor.execute("""
-                INSERT INTO user_activities (user_id, content_id, activity_type, created_at)
-                VALUES (?, ?, ?, ?)
-            """, (session['user_id'], content_id, activity_type, datetime.now()))
+            INSERT OR REPLACE INTO user_activities 
+            (user_id, content_id, activity_type, created_at)
+            VALUES (?, ?, ?, ?)
+        """, (session['user_id'], content_id, activity_type, datetime.now()))
         
         connection.commit()
         cursor.close()
