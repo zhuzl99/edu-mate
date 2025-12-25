@@ -109,6 +109,30 @@ def split_tags(value):
     
     return []
 
+@app.template_filter('tags_input')
+def tags_input(value):
+    """Convert tags to input field format (comma-separated string)"""
+    if not value:
+        return ''
+    
+    # If it's already a string, just clean it up
+    if isinstance(value, str):
+        if '[' in value and ']' in value:
+            # Remove brackets and quotes, then split by comma
+            clean_value = value.replace('[', '').replace(']', '').replace("'", '').replace('"', '')
+            tags = [tag.strip() for tag in clean_value.split(',') if tag.strip()]
+            return ', '.join(tags)
+        else:
+            # Already comma-separated, just ensure proper formatting
+            tags = [tag.strip() for tag in value.split(',') if tag.strip()]
+            return ', '.join(tags)
+    
+    # If it's a list, join with commas
+    if isinstance(value, list):
+        return ', '.join(str(tag).strip() for tag in value if str(tag).strip())
+    
+    return ''
+
 # Import route blueprints
 from routes.auth import auth_bp
 from routes.user import user_bp
@@ -146,9 +170,9 @@ def inject_unread_count():
     return {'unread_count': 0}
 
 # Add custom static route for uploads
-@app.route('/uploads/<filename>')
+@app.route('/uploads/<path:filename>')
 def uploaded_file(filename):
-    """Serve uploaded files"""
+    """Serve uploaded files from subdirectories"""
     from flask import send_from_directory
     upload_folder = os.path.join(os.path.dirname(__file__), 'uploads')
     return send_from_directory(upload_folder, filename)
@@ -440,7 +464,7 @@ def dashboard():
             
             # 2. Completed - number of completed activities
             completed_count = connection.execute("""
-                SELECT COUNT(*) as count 
+                SELECT COUNT(DISTINCT ua.content_id) as count 
                 FROM user_activities ua 
                 WHERE ua.user_id = ? AND ua.activity_type = 'completed'
             """, (session['user_id'],)).fetchone()['count']

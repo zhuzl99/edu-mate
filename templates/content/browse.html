@@ -364,13 +364,24 @@ select.form-control::-webkit-scrollbar-thumb:hover {
         <div class="col-lg-4 col-md-6 mb-4">
             <div class="card content-card shadow h-100">
                 <div class="position-relative">
-                    {% if item.type == 'video' %}
-                    <img class="card-img-top content-img" src="https://picsum.photos/seed/video{{ item.id }}/400/200.jpg" alt="Video thumbnail">
-                    <div class="video-overlay">
-                        <div class="play-button">
-                            <i class="fas fa-play-circle"></i>
+                    {% if item.cover_image %}
+                        <!-- Use uploaded cover image -->
+                        <img class="card-img-top content-img" src="{{ item.cover_image }}" alt="{{ item.title }} cover image">
+                        {% if item.type == 'video' %}
+                        <div class="video-overlay">
+                            <div class="play-button">
+                                <i class="fas fa-play-circle"></i>
+                            </div>
                         </div>
-                    </div>
+                        {% endif %}
+                    {% elif item.type == 'video' %}
+                        <!-- Video thumbnail with play button -->
+                        <img class="card-img-top content-img" src="https://picsum.photos/seed/video{{ item.id }}/400/200.jpg" alt="Video thumbnail">
+                        <div class="video-overlay">
+                            <div class="play-button">
+                                <i class="fas fa-play-circle"></i>
+                            </div>
+                        </div>
                     {% elif item.type == 'document' %}
                         {% if item.file_url and item.file_url.startswith('http') and 'jpg' in item.file_url.lower() %}
                         <img class="card-img-top content-img" src="{{ item.file_url }}" alt="Document">
@@ -445,16 +456,16 @@ select.form-control::-webkit-scrollbar-thumb:hover {
                                         <a href="{{ url_for('content.view', content_id=item.id) }}" class="btn btn-sm btn-primary">
                                             <i class="fas fa-eye"></i>
                                         </a>
-                                        <a href="{{ url_for('admin.toggle_content', content_id=item.id) }}" 
+                                        <button type="button" 
                                            class="btn btn-sm {% if item.is_published %}btn-warning{% else %}btn-success{% endif %}"
                                            title="{% if item.is_published %}Unpublish content{% else %}Publish content{% endif %}"
-                                           onclick="return confirm('Are you sure you want to {% if item.is_published %}unpublish{% else %}publish{% endif %} this content?')">
+                                           onclick="showToggleConfirm({{ item.id }}, '{{ item.title|e }}', {% if item.is_published %}true{% else %}false{% endif %}, this)">
                                             {% if item.is_published %}
                                                 <i class="fas fa-eye-slash"></i>
                                             {% else %}
                                                 <i class="fas fa-check"></i>
                                             {% endif %}
-                                        </a>
+                                        </button>
                                     </div>
                                 {% else %}
                                     <!-- Regular user actions -->
@@ -544,4 +555,115 @@ select.form-control::-webkit-scrollbar-thumb:hover {
     </div>
     {% endif %}
 </div>
+
+<!-- Content Toggle Confirmation Modal -->
+<div class="modal fade" id="toggleContentModal" tabindex="-1" aria-labelledby="toggleContentModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="toggleContentModalLabel">
+                    <i class="fas fa-exclamation-triangle me-2 text-warning"></i>
+                    <span id="modalTitleText">Confirm Action</span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="text-center mb-3">
+                    <div id="modalIcon"></div>
+                </div>
+                <p class="mb-0" id="modalMessage"></p>
+                <form id="toggleForm" method="POST" style="display: none;">
+                    <input type="hidden" name="return_url" value="{{ request.url }}">
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-2"></i>Cancel
+                </button>
+                <button type="button" class="btn btn-primary" id="confirmToggleBtn">
+                    <i class="fas fa-check me-2"></i>
+                    <span id="confirmButtonText">Confirm</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let currentContentId = null;
+let currentButton = null;
+
+function showToggleConfirm(contentId, contentTitle, isPublished, button) {
+    currentContentId = contentId;
+    currentButton = button;
+    
+    const modal = new bootstrap.Modal(document.getElementById('toggleContentModal'));
+    
+    // Set modal content based on action
+    const modalTitle = document.getElementById('modalTitleText');
+    const modalMessage = document.getElementById('modalMessage');
+    const modalIcon = document.getElementById('modalIcon');
+    const confirmButton = document.getElementById('confirmToggleBtn');
+    const confirmButtonText = document.getElementById('confirmButtonText');
+    const form = document.getElementById('toggleForm');
+    
+    if (isPublished) {
+        // Unpublish action
+        modalTitle.textContent = 'Unpublish Content';
+        modalMessage.innerHTML = `Are you sure you want to unpublish "<strong>${contentTitle}</strong>"?<br><small class="text-muted">This content will no longer be visible to regular users.</small>`;
+        modalIcon.innerHTML = '<i class="fas fa-eye-slash fa-3x text-warning"></i>';
+        confirmButton.className = 'btn btn-warning';
+        confirmButtonText.textContent = 'Unpublish';
+    } else {
+        // Publish action
+        modalTitle.textContent = 'Publish Content';
+        modalMessage.innerHTML = `Are you sure you want to publish "<strong>${contentTitle}</strong>"?<br><small class="text-muted">This content will be visible to all users.</small>`;
+        modalIcon.innerHTML = '<i class="fas fa-check-circle fa-3x text-success"></i>';
+        confirmButton.className = 'btn btn-success';
+        confirmButtonText.textContent = 'Publish';
+    }
+    
+    // Set form action
+    form.action = `/admin/toggle-content/${contentId}`;
+    
+    // Show modal
+    modal.show();
+}
+
+// Handle confirm button click
+document.getElementById('confirmToggleBtn').addEventListener('click', function() {
+    if (currentContentId) {
+        // Get the form action URL
+        const form = document.getElementById('toggleForm');
+        const url = form.action;
+        
+        // Debug log
+        console.log('Redirecting to:', url);
+        
+        // Show loading state on button
+        const originalText = this.innerHTML;
+        this.disabled = true;
+        this.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Processing...';
+        
+        // Create URL with return_url parameter and redirect
+        const return_url = encodeURIComponent(window.location.href);
+        const fullUrl = `${url}?return_url=${return_url}`;
+        
+        // Redirect instead of form submit
+        window.location.href = fullUrl;
+    }
+});
+
+// Handle modal close - reset states
+document.getElementById('toggleContentModal').addEventListener('hidden.bs.modal', function() {
+    currentContentId = null;
+    currentButton = null;
+    const confirmButton = document.getElementById('confirmToggleBtn');
+    confirmButton.disabled = false;
+    confirmButton.className = 'btn btn-primary';
+    document.getElementById('confirmButtonText').textContent = 'Confirm';
+});
+</script>
 {% endblock %}

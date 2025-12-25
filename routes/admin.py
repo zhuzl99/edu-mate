@@ -373,7 +373,7 @@ def toggle_user(user_id):
     
     return redirect(url_for('admin.users'))
 
-@admin_bp.route('/toggle-content/<int:content_id>')
+@admin_bp.route('/toggle-content/<int:content_id>', methods=['GET', 'POST'])
 @admin_required
 def toggle_content(content_id):
     """Toggle content published status"""
@@ -462,8 +462,14 @@ EduMate Administration Team
         flash(f'Error updating content: {err}', 'error')
         if 'connection' in locals() and connection:
             connection.close()
+        
+        # Even on error, check if there's a return_url parameter
+        return_url = request.form.get('return_url') or request.referrer or url_for('admin.content')
+        return redirect(return_url)
     
-    return redirect(url_for('admin.content'))
+    # Check if there's a return_url parameter for successful operations
+    return_url = request.form.get('return_url') or request.referrer or url_for('admin.content')
+    return redirect(return_url)
 
 @admin_bp.route('/clear-bookmarks', methods=['POST'])
 @admin_required

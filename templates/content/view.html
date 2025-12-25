@@ -347,6 +347,17 @@
 .feedback-deleting {
     animation: fadeOutSlide 0.3s ease-out forwards;
 }
+
+/* Cover Image Styles */
+.content-cover img {
+    max-height: 400px;
+    object-fit: cover;
+    transition: transform 0.3s ease;
+}
+
+.content-cover img:hover {
+    transform: scale(1.02);
+}
 </style>
 
 <div class="container">
@@ -392,6 +403,13 @@
 
     <div class="row">
         <div class="col-lg-8">
+            <!-- Cover Image Display -->
+            {% if content.cover_image %}
+            <div class="content-cover mb-4">
+                <img src="{{ content.cover_image }}" alt="{{ content.title }} cover image" class="w-100 rounded shadow-sm">
+            </div>
+            {% endif %}
+            
             <!-- Content Body -->
             <div class="content-body">
                 {% if content.external_link %}
@@ -944,31 +962,39 @@ function showNotification(message, type) {
 }
 
 function recordActivity(activityType) {
+    // This function is now only used for bookmark toggle
+    showNotification('Processing...', 'info');
+    
     fetch('/content/{{ content.id }}/activity', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
         },
         body: JSON.stringify({
             activity_type: activityType
         })
     })
     .then(function(response) {
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
         return response.json();
     })
     .then(function(data) {
         if (data.success) {
-            var messages = {
+            var successMessages = {
                 'viewed': 'Marked as viewed!',
-                'in_progress': 'Marked as in progress!',
                 'completed': 'Marked as completed!',
                 'bookmarked': 'Added to bookmarks!'
             };
             
-            showNotification(messages[activityType], 'success');
+            // Show success notification
+            showNotification(successMessages[activityType], 'success');
             
             // Only reload page for activities other than 'viewed'
             if (activityType !== 'viewed') {
+                // Don't show another notification since we already showed success
                 setTimeout(function() {
                     location.reload();
                 }, 1500);
@@ -978,17 +1004,119 @@ function recordActivity(activityType) {
         }
     })
     .catch(function(error) {
-        console.error('Error:', error);
-        showNotification('Network error. Please try again.', 'warning');
+        console.error('Error recording activity:', error);
+        let errorMessage = 'Network error. Please try again.';
+        
+        if (error.message.includes('401')) {
+            errorMessage = 'Please log in to mark content.';
+        } else if (error.message.includes('404')) {
+            errorMessage = 'Content not found.';
+        } else if (error.message.includes('400')) {
+            errorMessage = 'Invalid request.';
+        }
+        
+        showNotification(errorMessage, 'error');
     });
 }
 
 function markAsViewed() {
-    recordActivity('viewed');
+    // Simple visual feedback without loading message
+    const btn = event.target;
+    const originalText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Processing...';
+    
+    fetch('/content/{{ content.id }}/activity', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+        },
+        body: JSON.stringify({
+            activity_type: 'viewed'
+        })
+    })
+    .then(function(response) {
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+    })
+    .then(function(data) {
+        if (data.success) {
+            showNotification('Marked as viewed!', 'success');
+        } else {
+            showNotification(data.error || 'Operation failed', 'error');
+        }
+    })
+    .catch(function(error) {
+        console.error('Error recording activity:', error);
+        let errorMessage = 'Network error. Please try again.';
+        
+        if (error.message.includes('401')) {
+            errorMessage = 'Please log in to mark content.';
+        } else if (error.message.includes('404')) {
+            errorMessage = 'Content not found.';
+        } else if (error.message.includes('400')) {
+            errorMessage = 'Invalid request.';
+        }
+        
+        showNotification(errorMessage, 'error');
+    })
+    .finally(() => {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+    });
 }
 
 function markAsCompleted() {
-    recordActivity('completed');
+    // Add temporary visual feedback
+    const btn = event.target;
+    const originalText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Processing...';
+    
+    fetch('/content/{{ content.id }}/activity', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+        },
+        body: JSON.stringify({
+            activity_type: 'completed'
+        })
+    })
+    .then(function(response) {
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+    })
+    .then(function(data) {
+        if (data.success) {
+            showNotification('Marked as completed!', 'success');
+        } else {
+            showNotification(data.error || 'Operation failed', 'error');
+        }
+    })
+    .catch(function(error) {
+        console.error('Error recording activity:', error);
+        let errorMessage = 'Network error. Please try again.';
+        
+        if (error.message.includes('401')) {
+            errorMessage = 'Please log in to mark content.';
+        } else if (error.message.includes('404')) {
+            errorMessage = 'Content not found.';
+        } else if (error.message.includes('400')) {
+            errorMessage = 'Invalid request.';
+        }
+        
+        showNotification(errorMessage, 'error');
+    })
+    .finally(() => {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+    });
 }
 
 function toggleBookmark() {

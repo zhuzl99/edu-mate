@@ -760,6 +760,61 @@
                                     </div>
                                 </div>
 
+                                <!-- Cover Image Upload Section -->
+                                <div class="mb-4">
+                                    <label class="form-label d-flex align-items-center">
+                                        <i class="fas fa-image me-2 text-primary"></i>
+                                        Cover Image <small class="text-muted ms-2">(Optional - Recommended 16:9 aspect ratio)</small>
+                                    </label>
+                                    <div class="cover-upload-container">
+                                        <input type="file" class="form-control" id="cover_image" name="cover_image"
+                                               accept="image/jpeg,image/jpg,image/png,image/webp"
+                                               style="display: none;">
+                                        
+                                        <div class="cover-upload-ui" onclick="document.getElementById('cover_image').click()">
+                                            <!-- Current/Preview Cover Image -->
+                                            <div class="cover-preview" id="cover_preview">
+                                                {% if content and content.cover_image %}
+                                                    <img src="{{ content.cover_image }}" alt="Current cover image" class="cover-preview-img">
+                                                    <div class="cover-preview-overlay">
+                                                        <i class="fas fa-camera"></i>
+                                                        <span>Click to change</span>
+                                                    </div>
+                                                {% else %}
+                                                    <div class="cover-placeholder">
+                                                        <i class="fas fa-image fa-3x text-muted"></i>
+                                                        <p class="mb-0 mt-2">Click to upload cover image</p>
+                                                        <small class="text-muted">Recommended: 800x450px, JPG/PNG/WebP</small>
+                                                    </div>
+                                                {% endif %}
+                                            </div>
+                                            
+                                            <!-- Cover Image Actions -->
+                                            <div class="cover-actions" id="cover_actions" style="display: none;">
+                                                <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeCoverImage()">
+                                                    <i class="fas fa-trash me-1"></i>Remove
+                                                </button>
+                                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="resetCoverImage()">
+                                                    <i class="fas fa-undo me-1"></i>Reset
+                                                </button>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Upload Progress -->
+                                        <div class="cover-upload-progress" id="cover_upload_progress" style="display: none;">
+                                            <div class="progress">
+                                                <div class="progress-bar" role="progressbar" style="width: 0%">0%</div>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Cover Image Info -->
+                                        <div class="alert alert-sm alert-info mt-2">
+                                            <i class="fas fa-info-circle me-2"></i>
+                                            <strong>Tips:</strong> A good cover image helps attract more viewers. Use high-quality images with 16:9 aspect ratio for best results.
+                                        </div>
+                                    </div>
+                                </div>
+
                                 <div class="row">
                                     <div class="col-md-6 mb-3">
                                         <label for="difficulty" class="form-label">
@@ -804,7 +859,7 @@
                                             <i class="fas fa-tags"></i>
                                         </span>
                                         <input type="text" class="form-control" id="tags" name="tags"
-                                               value="{% if content %}{{ content.tags or '' }}{% endif %}"
+                                               value="{% if content %}{{ content.tags|tags_input }}{% endif %}"
                                                placeholder="e.g., python, programming, tutorial">
                                     </div>
                                 </div>
@@ -1431,6 +1486,128 @@
     .btn-lg {
         padding: 0.75rem 1.5rem;
         font-size: 1rem;
+    }
+}
+/* Cover Image Upload Styles */
+.cover-upload-container {
+    position: relative;
+}
+
+.cover-upload-ui {
+    cursor: pointer;
+    position: relative;
+    display: inline-block;
+    width: 100%;
+}
+
+.cover-preview {
+    position: relative;
+    width: 100%;
+    max-width: 400px;
+    height: 225px;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 2px dashed #dee2e6;
+    background: #f8f9fa;
+    transition: all 0.3s ease;
+}
+
+.cover-preview:hover {
+    border-color: #007bff;
+    background: #e3f2fd;
+    transform: translateY(-2px);
+}
+
+.cover-preview-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 10px;
+}
+
+.cover-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 2rem;
+}
+
+.cover-preview-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    border-radius: 10px;
+}
+
+.cover-preview:hover .cover-preview-overlay {
+    opacity: 1;
+}
+
+.cover-preview-overlay i {
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+}
+
+.cover-actions {
+    margin-top: 1rem;
+    display: flex;
+    gap: 0.5rem;
+}
+
+.cover-upload-progress {
+    margin-top: 1rem;
+    display: none;
+}
+
+.cover-upload-progress .progress {
+    height: 8px;
+    border-radius: 4px;
+    overflow: hidden;
+    background: #e9ecef;
+}
+
+.cover-upload-progress .progress-bar {
+    background: linear-gradient(90deg, #007bff 0%, #0056b3 100%);
+    transition: width 0.3s ease;
+    color: white;
+    font-size: 0.75rem;
+    line-height: 8px;
+    text-align: center;
+}
+
+.alert-sm {
+    padding: 0.75rem 1rem;
+    font-size: 0.875rem;
+    border-radius: 8px;
+}
+
+/* Responsive cover preview */
+@media (max-width: 768px) {
+    .cover-preview {
+        max-width: 100%;
+        height: 200px;
+    }
+    
+    .cover-actions {
+        justify-content: center;
+    }
+    
+    .cover-actions button {
+        flex: 1;
     }
 }
 </style>
@@ -2207,6 +2384,134 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
+    
+    // Cover Image Upload Functionality
+    const coverImageInput = document.getElementById('cover_image');
+    const coverPreview = document.getElementById('cover_preview');
+    const coverActions = document.getElementById('cover_actions');
+    const coverUploadProgress = document.getElementById('cover_upload_progress');
+    
+    coverImageInput?.addEventListener('change', handleCoverImageSelect);
+    
+    function handleCoverImageSelect(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        // Validate file type
+        const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+        if (!allowedTypes.includes(file.type)) {
+            showNotification('Please select a valid image file (JPG, PNG, or WebP)', 'error');
+            return;
+        }
+        
+        // Validate file size (max 5MB)
+        const maxSize = 5 * 1024 * 1024; // 5MB
+        if (file.size > maxSize) {
+            showNotification('Image size must be less than 5MB', 'error');
+            return;
+        }
+        
+        // Preview the image
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            displayCoverPreview(e.target.result);
+            coverActions.style.display = 'flex';
+        };
+        reader.readAsDataURL(file);
+        
+        // Simulate upload progress
+        simulateCoverUpload();
+    }
+    
+    function displayCoverPreview(imageSrc) {
+        coverPreview.innerHTML = `
+            <img src="${imageSrc}" alt="Cover preview" class="cover-preview-img">
+            <div class="cover-preview-overlay">
+                <i class="fas fa-camera"></i>
+                <span>Click to change</span>
+            </div>
+        `;
+    }
+    
+    function simulateCoverUpload() {
+        coverUploadProgress.style.display = 'block';
+        const progressBar = coverUploadProgress.querySelector('.progress-bar');
+        let progress = 0;
+        
+        const interval = setInterval(() => {
+            progress += Math.random() * 15;
+            if (progress >= 100) {
+                progress = 100;
+                clearInterval(interval);
+                setTimeout(() => {
+                    coverUploadProgress.style.display = 'none';
+                    showNotification('Cover image uploaded successfully!', 'success');
+                }, 500);
+            }
+            progressBar.style.width = progress + '%';
+            progressBar.textContent = Math.round(progress) + '%';
+        }, 100);
+    }
+    
+    window.removeCoverImage = function() {
+        if (confirm('Are you sure you want to remove the cover image?')) {
+            coverImageInput.value = '';
+            coverPreview.innerHTML = `
+                <div class="cover-placeholder">
+                    <i class="fas fa-image fa-3x text-muted"></i>
+                    <p class="mb-0 mt-2">Click to upload cover image</p>
+                    <small class="text-muted">Recommended: 800x450px, JPG/PNG/WebP</small>
+                </div>
+            `;
+            coverActions.style.display = 'none';
+            showNotification('Cover image removed', 'info');
+        }
+    };
+    
+    window.resetCoverImage = function() {
+        // Reset to original cover if in edit mode
+        {% if content and content.cover_image %}
+        coverPreview.innerHTML = `
+            <img src="{{ content.cover_image }}" alt="Current cover image" class="cover-preview-img">
+            <div class="cover-preview-overlay">
+                <i class="fas fa-camera"></i>
+                <span>Click to change</span>
+            </div>
+        `;
+        {% else %}
+        coverPreview.innerHTML = `
+            <div class="cover-placeholder">
+                <i class="fas fa-image fa-3x text-muted"></i>
+                <p class="mb-0 mt-2">Click to upload cover image</p>
+                <small class="text-muted">Recommended: 800x450px, JPG/PNG/WebP</small>
+            </div>
+        `;
+        {% endif %}
+        coverActions.style.display = 'none';
+        coverImageInput.value = '';
+    };
+    
+    // Drag and drop for cover image
+    coverPreview?.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        this.classList.add('dragover');
+    });
+    
+    coverPreview?.addEventListener('dragleave', function(e) {
+        e.preventDefault();
+        this.classList.remove('dragover');
+    });
+    
+    coverPreview?.addEventListener('drop', function(e) {
+        e.preventDefault();
+        this.classList.remove('dragover');
+        
+        const files = e.dataTransfer.files;
+        if (files.length > 0) {
+            coverImageInput.files = files;
+            handleCoverImageSelect({ target: { files: files } });
+        }
+    });
 });
 </script>
 {% endblock %}

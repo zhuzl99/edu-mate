@@ -20,6 +20,15 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+def allowed_cover_image(filename):
+    """Check if cover image file is allowed"""
+    if not filename:
+        return False
+    
+    ext = filename.rsplit('.', 1)[1].lower() if '.' in filename else ''
+    allowed_exts = {'jpg', 'jpeg', 'png', 'webp'}
+    return ext in allowed_exts
+
 def allowed_file(filename, content_type):
     """Check if file is allowed for content type"""
     ALLOWED_EXTENSIONS = {
@@ -68,6 +77,19 @@ def allowed_file(filename, content_type):
     
     current_app.logger.debug(f'Extension {ext} not allowed for content type {content_type}')
     return False
+
+def allowed_cover_image(filename):
+    """Check if file is allowed as cover image"""
+    if not filename or '.' not in filename:
+        return False
+    
+    # Get the file extension
+    ext = filename.rsplit('.', 1)[1].lower().strip()
+    
+    # Allowed image extensions for cover images
+    ALLOWED_COVER_EXTENSIONS = {'jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'}
+    
+    return ext in ALLOWED_COVER_EXTENSIONS
 
 content_bp = Blueprint('content', __name__)
 
@@ -183,6 +205,7 @@ def browse():
                 c.difficulty_level,
                 c.file_url,
                 c.external_link,
+                c.cover_image,
                 c.tags,
                 c.uploaded_by,
                 c.category_id,
@@ -304,7 +327,26 @@ def upload():
             content_type = request.form.get('type')
             difficulty = request.form.get('difficulty')
             category_id = request.form.get('category_id')
-            tags = request.form.getlist('tags')
+            # Handle tags properly - split by comma and clean up
+            tags_input = request.form.get('tags', '')
+            tags = [tag.strip() for tag in tags_input.split(',') if tag.strip()] if tags_input else []
+            
+            # Handle cover image upload
+            cover_image = None
+            if 'cover_image' in request.files:
+                cover_file = request.files['cover_image']
+                if cover_file and cover_file.filename and allowed_cover_image(cover_file.filename):
+                    cover_filename = secure_filename(cover_file.filename)
+                    # Generate unique filename
+                    import uuid
+                    name, ext = os.path.splitext(cover_filename)
+                    cover_filename = f"{name}_{uuid.uuid4().hex[:8]}{ext}"
+                    
+                    cover_path = os.path.join('uploads', 'covers')
+                    os.makedirs(cover_path, exist_ok=True)
+                    cover_file.save(os.path.join(cover_path, cover_filename))
+                    cover_image = f"/uploads/covers/{cover_filename}"
+            
             external_link = request.form.get('external_link')
             source_type = request.form.get('source_type')
             # Check if user wants to publish and has permission
@@ -362,15 +404,15 @@ def upload():
                         return render_template('content/upload.html', categories=categories)
             
             # Insert content
-            tags_json = str(tags) if tags else None
+            tags_json = ','.join(tags) if tags else None
             
             cursor.execute("""
                 INSERT INTO content 
-                (title, description, type, difficulty_level, external_link, file_url,
+                (title, description, type, difficulty_level, external_link, file_url, cover_image,
                  uploaded_by, category_id, tags, is_published, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
-                title, description, content_type, difficulty, external_link, file_url,
+                title, description, content_type, difficulty, external_link, file_url, cover_image,
                 session['user_id'], category_id or None, tags_json,
                 1 if publish_now else 0, datetime.now(), datetime.now()  # SQLite uses 1 for boolean
             ))
@@ -775,49 +817,6 @@ def record_activity(content_id):
         if activity_type not in valid_activities:
             return jsonify({'error': 'Invalid activity type'}), 400
         
-        # Special handling for viewed and completed activities
-        cursor = connection.cursor()
-        
-        if activity_type == 'viewed':
-            # Check if content is already in progress
-            cursor.execute("""
-                SELECT activity_type FROM user_activities 
-                WHERE user_id = ? AND content_id = ? AND activity_type = 'in_progress'
-            """, (session['user_id'], content_id))
-            existing_in_progress = cursor.fetchone()
-            
-            if existing_in_progress:
-                # Already in progress, just update timestamp
-                activity_type = 'in_progress'
-            else:
-                # Set to in progress when viewed for first time
-                activity_type = 'in_progress'
-        
-        elif activity_type == 'completed':
-            # When marking as completed, check if there's an in_progress record to update
-            cursor.execute("""
-                SELECT id FROM user_activities 
-                WHERE user_id = ? AND content_id = ? AND activity_type = 'in_progress'
-            """, (session['user_id'], content_id))
-            in_progress_record = cursor.fetchone()
-            
-            if in_progress_record:
-                # Update existing in_progress to completed
-                cursor.execute("""
-                    UPDATE user_activities 
-                    SET activity_type = 'completed', created_at = ?
-                    WHERE id = ?
-                """, (datetime.now(), in_progress_record['id']))
-                
-                connection.commit()
-                cursor.close()
-                connection.close()
-                
-                return jsonify({'success': True, 'message': 'Activity updated to completed'})
-            else:
-                # No in_progress record found, just insert completed
-                pass
-        
         # Check if content exists - admins can access all content, content owners can see their own unpublished content
         if session.get('user_role') == 'admin':
             content = connection.execute(
@@ -832,7 +831,87 @@ def record_activity(content_id):
             ).fetchone()
         
         if not content:
+            connection.close()
             return jsonify({'error': 'Content not found'}), 404
+        
+        # Special handling for viewed and completed activities
+        cursor = connection.cursor()
+        
+        if activity_type == 'viewed':
+            # When marking as viewed, we need to create an in_progress record
+            try:
+                # Check if there's already an in_progress record
+                cursor.execute("""
+                    SELECT id FROM user_activities 
+                    WHERE user_id = ? AND content_id = ? AND activity_type = 'in_progress'
+                """, (session['user_id'], content_id))
+                existing_in_progress = cursor.fetchone()
+                
+                if not existing_in_progress:
+                    # Create in_progress record for dashboard statistics
+                    cursor.execute("""
+                        INSERT INTO user_activities 
+                        (user_id, content_id, activity_type, created_at)
+                        VALUES (?, ?, ?, ?)
+                    """, (session['user_id'], content_id, 'in_progress', datetime.now()))
+            except Exception as e:
+                # If in_progress is not supported, just continue with viewed record
+                current_app.logger.warning(f"Could not create in_progress record: {e}")
+                pass
+            
+            # Also update/create viewed record
+            cursor.execute("""
+                INSERT OR REPLACE INTO user_activities 
+                (user_id, content_id, activity_type, created_at)
+                VALUES (?, ?, ?, ?)
+            """, (session['user_id'], content_id, 'viewed', datetime.now()))
+            
+            connection.commit()
+            cursor.close()
+            connection.close()
+            
+            return jsonify({'success': True, 'message': 'Content marked as viewed'})
+        
+        elif activity_type == 'completed':
+            # When marking as completed:
+            try:
+                # 1. Remove any in_progress record (decrement In Progress count)
+                cursor.execute("""
+                    DELETE FROM user_activities 
+                    WHERE user_id = ? AND content_id = ? AND activity_type = 'in_progress'
+                """, (session['user_id'], content_id))
+            except Exception as e:
+                # If in_progress is not supported, just continue with completed record
+                current_app.logger.warning(f"Could not remove in_progress record: {e}")
+                pass
+            
+            # 2. Check if completed record already exists
+            cursor.execute("""
+                SELECT id FROM user_activities 
+                WHERE user_id = ? AND content_id = ? AND activity_type = 'completed'
+            """, (session['user_id'], content_id))
+            existing_completed = cursor.fetchone()
+            
+            if existing_completed:
+                # Already completed, just update timestamp
+                cursor.execute("""
+                    UPDATE user_activities 
+                    SET created_at = ?
+                    WHERE id = ?
+                """, (datetime.now(), existing_completed['id']))
+            else:
+                # First time marking as completed
+                cursor.execute("""
+                    INSERT INTO user_activities 
+                    (user_id, content_id, activity_type, created_at)
+                    VALUES (?, ?, ?, ?)
+                """, (session['user_id'], content_id, 'completed', datetime.now()))
+            
+            connection.commit()
+            cursor.close()
+            connection.close()
+            
+            return jsonify({'success': True, 'message': 'Activity marked as completed'})
         
         # Record the activity using INSERT OR REPLACE to handle duplicates
         cursor.execute("""
@@ -1065,7 +1144,27 @@ def edit(content_id):
             content_type = request.form.get('type')
             difficulty = request.form.get('difficulty')
             category_id = request.form.get('category_id')
-            tags = request.form.get('tags')
+            # Handle tags properly - split by comma and clean up
+            tags_input = request.form.get('tags', '')
+            tags = [tag.strip() for tag in tags_input.split(',') if tag.strip()] if tags_input else []
+            tags_str = ','.join(tags) if tags else None
+            
+            # Handle cover image upload
+            cover_image = content['cover_image'] if content['cover_image'] else None  # Keep existing cover image by default
+            if 'cover_image' in request.files:
+                cover_file = request.files['cover_image']
+                if cover_file and cover_file.filename:
+                    cover_filename = secure_filename(cover_file.filename)
+                    # Generate unique filename
+                    import uuid
+                    name, ext = os.path.splitext(cover_filename)
+                    cover_filename = f"{name}_{uuid.uuid4().hex[:8]}{ext}"
+                    
+                    cover_path = os.path.join('uploads', 'covers')
+                    os.makedirs(cover_path, exist_ok=True)
+                    cover_file.save(os.path.join(cover_path, cover_filename))
+                    cover_image = f"/uploads/covers/{cover_filename}"
+            
             external_link = request.form.get('external_link')
             source_type = request.form.get('source_type')
             # Check if user wants to publish and has permission
@@ -1122,12 +1221,12 @@ def edit(content_id):
             cursor.execute("""
                 UPDATE content 
                 SET title = ?, description = ?, type = ?, difficulty_level = ?,
-                    category_id = ?, external_link = ?, file_url = ?, tags = ?, 
+                    category_id = ?, external_link = ?, file_url = ?, cover_image = ?, tags = ?, 
                     is_published = ?, updated_at = ?
                 WHERE id = ?
             """, (
                 title, description, content_type, difficulty, 
-                category_id or None, external_link, file_url, tags, 
+                category_id or None, external_link, file_url, cover_image, tags_str, 
                 1 if publish_now else 0, datetime.now(), content_id
             ))
             
