@@ -191,7 +191,9 @@ def users():
     
     except Exception as err:
         flash(f'Error loading users: {err}', 'error')
-        return render_template('admin/users.html', users_list=[])
+        return render_template('admin/users.html', 
+                             users_list=[],
+                             search_params={'search': '', 'role': '', 'status': ''})
 
 @admin_bp.route('/content')
 @admin_required
@@ -214,7 +216,7 @@ def content():
         params = []
         
         if search:
-            where_conditions.append("(title LIKE ? OR description LIKE ?)")
+            where_conditions.append("(c.title LIKE ? OR c.description LIKE ?)")
             params.extend([f'%{search}%', f'%{search}%'])
         
         if type_filter:
@@ -229,10 +231,27 @@ def content():
         
         where_clause = " WHERE " + " AND ".join(where_conditions) if where_conditions else ""
         
-        # Get content
+        # Get content - explicitly list columns to avoid ambiguity
         cursor.execute(f"""
             SELECT 
-                c.*,
+                c.id,
+                c.title,
+                c.description,
+                c.type,
+                c.file_url,
+                c.external_link,
+                c.cover_image,
+                c.difficulty_level,
+                c.tags,
+                c.uploaded_by,
+                c.category_id,
+                c.is_published,
+                c.download_count,
+                c.view_count,
+                c.average_rating,
+                c.rating_count,
+                c.created_at,
+                c.updated_at,
                 cat.name as category_name,
                 u.full_name as uploader_name
             FROM content c
@@ -253,7 +272,9 @@ def content():
     
     except Exception as err:
         flash(f'Error loading content: {err}', 'error')
-        return render_template('admin/content.html', content_list=[])
+        return render_template('admin/content.html', 
+                             content_list=[],
+                             search_params={'search': '', 'type': '', 'status': ''})
 
 @admin_bp.route('/analytics')
 @admin_required
